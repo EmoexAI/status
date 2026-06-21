@@ -29,9 +29,9 @@ status-website:
   name: EmoEx Status
   introTitle: "Real-time status of EmoEx production services"
   introMessage: |
-    This page is **hosted on GitHub Pages and probed from GitHub Actions** —
-    completely independent of our GCP infrastructure. If the entire GCP project
-    goes down, this page will keep working and accurately report the outage.
+    Health for `api.emoexai.com`, `iepcp.emoexai.com`, and `pages.emoexai.com`
+    is probed every 5 minutes. This page is hosted independently of those
+    services, so it stays online and accurate even during a full outage.
   navbar:
     - title: Status
       href: /

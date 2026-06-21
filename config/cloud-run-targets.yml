@@ -15,6 +15,11 @@ project: emoex-9aa45
 
 defaults:
   window_minutes: 15
+  # How far back to look for *any* historical success before we apply the
+  # short-window degradation rule. Until a service has at least one success
+  # log within this lookback, it's treated as "not yet activated" and we
+  # do NOT open incidents for it. (Avoids false alarms on first deploy.)
+  bootstrap_window_minutes: 10080   # 7 days
   error_filter: 'severity>=ERROR'
 
 services:

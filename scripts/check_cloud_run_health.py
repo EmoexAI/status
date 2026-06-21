@@ -93,6 +93,7 @@ def main() -> int:
     project = cfg["project"]
     defaults = cfg.get("defaults", {})
     default_window = int(defaults.get("window_minutes", 15))
+    default_bootstrap = int(defaults.get("bootstrap_window_minutes", 10080))
     default_error_filter = defaults.get("error_filter", "severity>=ERROR")
 
     overall = 0
@@ -102,6 +103,7 @@ def main() -> int:
         name = svc["name"]
         region = svc["region"]
         window = int(svc.get("window_minutes", default_window))
+        bootstrap = int(svc.get("bootstrap_window_minutes", default_bootstrap))
         success_filter = svc["success_filter"].strip()
         error_filter = svc.get("error_filter", default_error_filter).strip()
 
@@ -111,7 +113,29 @@ def main() -> int:
             f'AND resource.labels.location="{region}"'
         )
 
-        print(f"::group::Check {name} (window={window}m)")
+        print(f"::group::Check {name} (window={window}m, bootstrap={bootstrap}m)")
+
+        # Has the service ever produced a success log within the bootstrap
+        # window? If not, treat as "not yet activated" — don't alert.
+        ever_success = gcloud_logging_count(
+            f"{base} AND ({success_filter})", project, bootstrap
+        )
+        if not ever_success:
+            print(
+                f"{name}: no success log in last {bootstrap}m — "
+                "treating as not-yet-activated, skipping"
+            )
+            existing_skip = find_open_issue(f"service:{name}")
+            if existing_skip is not None:
+                print(f"Closing stale incident #{existing_skip} (now in bootstrap state)")
+                comment_issue(
+                    existing_skip,
+                    f"Reclassified as not-yet-activated at {now} "
+                    f"(no success log in last {bootstrap}m). Auto-closing.",
+                )
+                close_issue(existing_skip)
+            print("::endgroup::")
+            continue
 
         errors = gcloud_logging_count(f"{base} AND ({error_filter})", project, window)
         successes = gcloud_logging_count(f"{base} AND ({success_filter})", project, window)
@@ -120,7 +144,10 @@ def main() -> int:
         if errors:
             reasons.append(f"ERROR-level log found in last {window}m")
         if not successes:
-            reasons.append(f"no success log in last {window}m")
+            reasons.append(
+                f"no success log in last {window}m "
+                f"(but service was active within last {bootstrap}m — likely degraded)"
+            )
 
         label = f"service:{name}"
         all_labels = ["status", "cloud-run", label]
