@@ -1,7 +1,10 @@
 name: Response Time CI
 on:
   schedule:
-    - cron: "0 23 * * *"
+    # Every 6 hours. The 7-day response time chart in status-page filters
+    # commits to history/<slug>.yml with per_page: 28 (hard-coded), so 28
+    # points × 6h ≈ 7 days fills the visible window without truncation.
+    - cron: "0 */6 * * *"
   repository_dispatch:
     types:
       - response_time
