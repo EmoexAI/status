@@ -14,5 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: upptime/uptime-monitor@master
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         with:
           command: "summary"
