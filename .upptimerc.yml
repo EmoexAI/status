@@ -35,6 +35,11 @@ status-website:
   navbar:
     - title: Status
       href: /
+  # Hide the "Past Incidents" section on the home page. It is rendered by
+  # the Incidents component as the last <section> inside main.container
+  # (after ActiveIncidents, ActiveScheduled, LiveStatus, Scheduled).
+  css: |
+    main.container > section:last-of-type { display: none; }
 
 # How often to run probes (default cron is */5 * * * *, i.e. every 5 min).
 # Slow it down if you hit GitHub Actions quota.
