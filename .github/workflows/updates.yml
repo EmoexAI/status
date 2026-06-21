@@ -1,0 +1,19 @@
+name: Updates CI
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  repository_dispatch:
+    types:
+      - updates
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: upptime/uptime-monitor@v1
+        with:
+          command: "update-template"

@@ -1,0 +1,39 @@
+# Cloud Run services monitored via log inspection.
+#
+# Why log-based: these services don't expose a user-facing URL, so we can't
+# HTTP-probe them. Instead we ask GCP Logging: in the last <window> minutes,
+# did any ERROR appear AND did at least one success signal appear? Either
+# failure marks the service unhealthy and opens an Upptime incident (issue).
+#
+# Editing this file:
+#   - `success_filter` uses Cloud Logging filter syntax. Keep it as specific
+#     as you can — a too-broad filter will mask real outages.
+#   - `window_minutes` should be wider than the service's normal idle period.
+#     Background tasks that run hourly need window ≥ 60.
+
+project: emoex-9aa45
+
+defaults:
+  window_minutes: 15
+  error_filter: 'severity>=ERROR'
+
+services:
+  - name: emoex-evaluator
+    region: australia-southeast1
+    # Evaluator wakes on demand, so we use a long-ish window. Adjust once
+    # we observe its actual invocation cadence in production.
+    window_minutes: 120
+    # Success = any healthy api activity log. The startup/shutdown lifecycle
+    # lines are NOT counted (they fire on every cold start, masking real
+    # problems where the service starts but never serves a request).
+    success_filter: |
+      jsonPayload.message=~"emoex_evaluation_workflow" AND NOT jsonPayload.message=~"shutdown"
+
+  - name: summary-task
+    region: australia-southeast1
+    window_minutes: 15
+    # ChatSummaryService logs a "task completed" / "submitted successfully"
+    # line at the end of every successful run. If we see one within the
+    # window, the cron is firing and processing OK.
+    success_filter: |
+      textPayload=~"task completed|submitted successfully"

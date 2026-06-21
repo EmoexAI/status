@@ -1,0 +1,25 @@
+name: Static Site CI
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  repository_dispatch:
+    types:
+      - static_site
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: static-site
+  cancel-in-progress: true
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: upptime/uptime-monitor@v1
+        with:
+          command: "site"

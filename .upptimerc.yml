@@ -1,0 +1,44 @@
+# Upptime configuration — https://upptime.js.org/docs/configuration
+#
+# IMPORTANT: replace `owner` with your GitHub username or org BEFORE pushing.
+# `repo` should match the repo name you create on GitHub.
+
+owner: EmoexAI
+repo: emoex-status
+
+sites:
+  - name: API
+    url: https://api.emoexai.com/
+    expectedStatusCodes:
+      - 200
+      - 401  # API root requires auth; reaching auth means service is up
+      - 404
+  - name: IEPCP
+    url: https://iepcp.emoexai.com/
+  - name: Pages
+    url: https://pages.emoexai.com/
+
+# Notifications: configure later if you want — Slack, email, Discord, etc.
+# notifications:
+#   - type: slack
+#     channel: "C0123456789"
+
+# Status website (the public-facing page rendered on GitHub Pages).
+status-website:
+  cname: status.emoexai.com   # set DNS CNAME → emoexai.github.io
+  name: EmoEx Status
+  introTitle: "Real-time status of EmoEx production services"
+  introMessage: |
+    This page is **hosted on GitHub Pages and probed from GitHub Actions** —
+    completely independent of our GCP infrastructure. If the entire GCP project
+    goes down, this page will keep working and accurately report the outage.
+  navbar:
+    - title: Status
+      href: /
+    - title: GitHub
+      href: https://github.com/EmoexAI/emoex-status
+
+# How often to run probes (default cron is */5 * * * *, i.e. every 5 min).
+# Slow it down if you hit GitHub Actions quota.
+# assignees:
+#   - geminiwen

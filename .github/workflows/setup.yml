@@ -1,0 +1,21 @@
+name: Setup CI
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".upptimerc.yml"
+  repository_dispatch:
+    types:
+      - setup
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: upptime/uptime-monitor@v1
+        with:
+          command: "setup"

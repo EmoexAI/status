@@ -1,0 +1,22 @@
+name: Uptime CI
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  repository_dispatch:
+    types:
+      - uptime
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+jobs:
+  uptime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: upptime/uptime-monitor@v1
+        with:
+          command: "update"
