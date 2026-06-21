@@ -23,20 +23,13 @@ defaults:
   error_filter: 'severity>=ERROR'
 
 services:
-  - name: emoex-evaluator
-    region: australia-southeast1
-    # Evaluator wakes on demand, so we use a long-ish window. Adjust once
-    # we observe its actual invocation cadence in production.
-    window_minutes: 120
-    # Success = any healthy api activity log. The startup/shutdown lifecycle
-    # lines are NOT counted (they fire on every cold start, masking real
-    # problems where the service starts but never serves a request).
-    success_filter: |
-      jsonPayload.message=~"emoex_evaluation_workflow" AND NOT jsonPayload.message=~"shutdown"
-
   - name: summary-task
     region: australia-southeast1
-    window_minutes: 15
+    # summary-task is scheduled hourly. A 90-minute window guarantees at
+    # least one success log on the steady state even with cron jitter or
+    # an occasional long run, and flags a real outage after ~1.5 missed
+    # cycles. Tighten only if you confirm the cron is rock-steady.
+    window_minutes: 90
     # ChatSummaryService logs a "task completed" / "submitted successfully"
     # line at the end of every successful run. If we see one within the
     # window, the cron is firing and processing OK.
