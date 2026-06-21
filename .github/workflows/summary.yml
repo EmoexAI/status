@@ -13,6 +13,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: upptime/uptime-monitor@v1
+      - uses: upptime/uptime-monitor@master
         with:
           command: "summary"
