@@ -44,6 +44,19 @@ def gcloud_logging_count(filter_expr: str, project: str, window_minutes: int) ->
     return 0 if not out else 1
 
 
+def ensure_label(name: str, color: str = "d73a4a", description: str = "") -> None:
+    """Create the label if missing; silently skip on `already exists`."""
+    result = subprocess.run(
+        ["gh", "label", "create", name,
+         "--repo", REPO,
+         "--color", color,
+         "--description", description],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0 and "already exists" not in result.stderr:
+        raise RuntimeError(f"failed to ensure label {name!r}: {result.stderr.strip()}")
+
+
 def find_open_issue(label: str) -> int | None:
     out = run([
         "gh", "issue", "list",
@@ -111,6 +124,8 @@ def main() -> int:
 
         label = f"service:{name}"
         all_labels = ["status", "cloud-run", label]
+        for lbl in all_labels:
+            ensure_label(lbl, description="auto-managed by cloud-run-monitor")
         existing = find_open_issue(label)
 
         if reasons:
