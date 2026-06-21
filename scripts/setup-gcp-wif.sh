@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot GCP setup for the emoex-status repository.
+# One-shot GCP setup for the EmoexAI/status repository.
 #
 # Creates:
 #   1. Workload Identity Pool      : github-actions
@@ -12,7 +12,7 @@
 #
 # Run this on your laptop (you need owner/editor on the GCP project):
 #   ./scripts/setup-gcp-wif.sh <github-owner>/<github-repo>
-# e.g. ./scripts/setup-gcp-wif.sh geminiwen/emoex-status
+# e.g. ./scripts/setup-gcp-wif.sh EmoexAI/status
 #
 # After it finishes, copy the three values it prints into your GitHub repo:
 #   Settings → Secrets and variables → Actions → "Variables" tab

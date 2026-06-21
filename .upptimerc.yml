@@ -4,7 +4,7 @@
 # `repo` should match the repo name you create on GitHub.
 
 owner: EmoexAI
-repo: emoex-status
+repo: status
 
 sites:
   - name: API
@@ -36,7 +36,7 @@ status-website:
     - title: Status
       href: /
     - title: GitHub
-      href: https://github.com/EmoexAI/emoex-status
+      href: https://github.com/EmoexAI/status
 
 # How often to run probes (default cron is */5 * * * *, i.e. every 5 min).
 # Slow it down if you hit GitHub Actions quota.

@@ -31,7 +31,7 @@ issues as live incidents and renders them on the status page.
 
 ### 1. Create the GitHub repo
 
-Create an empty public repo at `https://github.com/EmoexAI/emoex-status`.
+Create an empty public repo at `https://github.com/EmoexAI/status`.
 Don't initialize with README — we already have one.
 
 ### 2. Replace placeholders
@@ -46,7 +46,7 @@ cd /Users/geminiwen/Code/EmoEx/status
 git init -b master
 git add .
 git commit -m "Initial commit"
-git remote add origin git@github.com:EmoexAI/emoex-status.git
+git remote add origin git@github.com:EmoexAI/status.git
 git push -u origin master
 ```
 
@@ -59,7 +59,7 @@ Repo Settings → Pages → Source: **Deploy from a branch** → Branch: `gh-pag
 You need GCP `Owner` or `Editor` on `emoex-9aa45`. Then:
 
 ```bash
-./scripts/setup-gcp-wif.sh EmoexAI/emoex-status
+./scripts/setup-gcp-wif.sh EmoexAI/status
 ```
 
 The script will print three values. Add them as **Repository Variables**
