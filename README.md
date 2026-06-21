@@ -7,13 +7,13 @@ accurately shows it red.
 
 ## What it monitors
 
-| Service | How |
-|---|---|
-| `api.emoexai.com` | HTTP probe (Upptime, every 5 min) |
-| `iepcp.emoexai.com` | HTTP probe (Upptime, every 5 min) |
-| `pages.emoexai.com` | HTTP probe (Upptime, every 5 min) |
+| Service                      | How                                                                 |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `api.emoexai.com`            | HTTP probe (Upptime, every 5 min)                                   |
+| `iepcp.emoexai.com`          | HTTP probe (Upptime, every 5 min)                                   |
+| `pages.emoexai.com`          | HTTP probe (Upptime, every 5 min)                                   |
 | Cloud Run: `emoex-evaluator` | GCP Logging query (every 5 min, see `config/cloud-run-targets.yml`) |
-| Cloud Run: `summary-task`    | GCP Logging query (every 5 min) |
+| Cloud Run: `summary-task`    | GCP Logging query (every 5 min)                                     |
 
 The three HTTP-probed domains sit behind Cloudflare → GKE, so each probe
 verifies the full edge → origin path end to end.
@@ -83,13 +83,16 @@ set in `.upptimerc.yml::status-website.cname`.
 ## Customizing
 
 ### Change which HTTP endpoints get probed
+
 Edit `.upptimerc.yml` → `sites`.
 
 ### Change Cloud Run rules
+
 Edit `config/cloud-run-targets.yml`. Each service can override `window_minutes`,
 `success_filter`, and `error_filter`. Filters use [Cloud Logging query language](https://cloud.google.com/logging/docs/view/logging-query-language).
 
 ### Add a new Cloud Run service
+
 Append to `services:` in `config/cloud-run-targets.yml` — no workflow
 changes needed.
 
