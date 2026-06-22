@@ -7,12 +7,12 @@ accurately shows it red.
 
 ## What it monitors
 
-| Service                      | How                                                                 |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `api.emoexai.com`            | HTTP probe (Upptime, every 5 min)                                   |
-| `iepcp.emoexai.com`          | HTTP probe (Upptime, every 5 min)                                   |
-| `pages.emoexai.com`          | HTTP probe (Upptime, every 5 min)                                   |
-| Cloud Run: `summary-task`    | GCP Logging query (every 5 min, see `config/cloud-run-targets.yml`) |
+| Service                   | How                                                                 |
+| ------------------------- | ------------------------------------------------------------------- |
+| `api.emoexai.com`         | HTTP probe (Upptime, every 5 min)                                   |
+| `iepcp.emoexai.com`       | HTTP probe (Upptime, every 5 min)                                   |
+| `pages.emoexai.com`       | HTTP probe (Upptime, every 5 min)                                   |
+| Cloud Run: `summary-task` | GCP Logging query (every 5 min, see `config/cloud-run-targets.yml`) |
 
 The three HTTP-probed domains sit behind Cloudflare → GKE, so each probe
 verifies the full edge → origin path end to end.
