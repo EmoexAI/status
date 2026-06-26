@@ -1,7 +1,7 @@
 url: https://api.emoexai.com/
-status: down
-code: 502
-responseTime: 411
-lastUpdated: 2026-06-26T08:07:41.155Z
+status: up
+code: 401
+responseTime: 502
+lastUpdated: 2026-06-26T09:31:36.498Z
 startTime: 2026-06-21T01:51:45.695Z
 generator: Upptime <https://github.com/upptime/upptime>
