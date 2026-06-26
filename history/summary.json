@@ -5,17 +5,19 @@
     "icon": "https://icons.duckduckgo.com/ip3/api.emoexai.com.ico",
     "slug": "api",
     "status": "up",
-    "uptime": "100.00%",
-    "uptimeDay": "100.00%",
-    "uptimeWeek": "100.00%",
-    "uptimeMonth": "100.00%",
-    "uptimeYear": "100.00%",
-    "time": 554,
+    "uptime": "98.90%",
+    "uptimeDay": "94.17%",
+    "uptimeWeek": "98.90%",
+    "uptimeMonth": "98.90%",
+    "uptimeYear": "98.90%",
+    "time": 544,
     "timeDay": 477,
-    "timeWeek": 554,
-    "timeMonth": 554,
-    "timeYear": 554,
-    "dailyMinutesDown": {}
+    "timeWeek": 544,
+    "timeMonth": 544,
+    "timeYear": 544,
+    "dailyMinutesDown": {
+      "2026-06-26": 84
+    }
   },
   {
     "name": "IEPCP",
@@ -28,11 +30,11 @@
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 973,
-    "timeDay": 861,
-    "timeWeek": 973,
-    "timeMonth": 973,
-    "timeYear": 973,
+    "time": 959,
+    "timeDay": 833,
+    "timeWeek": 959,
+    "timeMonth": 959,
+    "timeYear": 959,
     "dailyMinutesDown": {}
   },
   {
@@ -46,11 +48,11 @@
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 545,
+    "time": 538,
     "timeDay": 503,
-    "timeWeek": 545,
-    "timeMonth": 545,
-    "timeYear": 545,
+    "timeWeek": 538,
+    "timeMonth": 538,
+    "timeYear": 538,
     "dailyMinutesDown": {}
   }
 ]
