@@ -5,16 +5,16 @@
     "icon": "https://icons.duckduckgo.com/ip3/api.emoexai.com.ico",
     "slug": "api",
     "status": "up",
-    "uptime": "99.86%",
+    "uptime": "99.87%",
     "uptimeDay": "100.00%",
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
-    "uptimeYear": "99.86%",
-    "time": 536,
-    "timeDay": 491,
-    "timeWeek": 571,
-    "timeMonth": 536,
-    "timeYear": 536,
+    "uptimeYear": "99.87%",
+    "time": 539,
+    "timeDay": 667,
+    "timeWeek": 559,
+    "timeMonth": 540,
+    "timeYear": 539,
     "dailyMinutesDown": {
       "2026-06-26": 84
     }
@@ -30,11 +30,11 @@
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 958,
-    "timeDay": 830,
-    "timeWeek": 990,
-    "timeMonth": 975,
-    "timeYear": 958,
+    "time": 960,
+    "timeDay": 1053,
+    "timeWeek": 993,
+    "timeMonth": 982,
+    "timeYear": 960,
     "dailyMinutesDown": {}
   },
   {
@@ -48,11 +48,11 @@
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 545,
-    "timeDay": 449,
-    "timeWeek": 569,
-    "timeMonth": 551,
-    "timeYear": 545,
+    "time": 548,
+    "timeDay": 671,
+    "timeWeek": 561,
+    "timeMonth": 557,
+    "timeYear": 548,
     "dailyMinutesDown": {}
   }
 ]
