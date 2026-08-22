@@ -9,6 +9,13 @@ work during a full GCP outage, which is exactly when subscribers need the
 email. A notifier hosted on the infrastructure it reports on fails at the
 only moment it matters.
 
+## Current state
+
+Deployed and live at **https://status-api.emoexai.com** (D1 `emoex-status-maillist`,
+region APAC). Verified: health, auth on `/api/notify`, `503` on `/api/subscribe`.
+
+The one thing still missing is a mail provider — see below.
+
 ## ⚠️ Sending is not wired up yet
 
 `MAIL_PROVIDER` defaults to `none`. No provider has been chosen, so:
@@ -63,12 +70,16 @@ SPF/DKIM/DMARC, so bulk reputation stays separate from `info@emoexai.com`.
 Requires Cloudflare API token permissions: Workers Scripts:Edit,
 Workers Routes:Edit, D1:Edit, DNS:Edit, Zone:Read on `emoexai.com`.
 
+Already done for the current deployment — kept here for reference and for
+rebuilding from scratch.
+
 ```bash
 cd worker
+export CLOUDFLARE_API_TOKEN="$(op read 'op://Emoex/EmoEx Cloudflare Token/CLOUDFLARE_API_TOKEN')"
+export CLOUDFLARE_ACCOUNT_ID=fe29207a28d7267afdc23baf5773e0f8
 npm install
 
 # 1. Create the database, then paste the printed id into wrangler.jsonc
-#    in place of __D1_DATABASE_ID__
 npx wrangler d1 create emoex-status-maillist
 
 # 2. Create the tables
@@ -90,10 +101,16 @@ Then set on the GitHub repo:
 | Variable | `MAILLIST_ENDPOINT`        | `https://status-api.emoexai.com`   |
 | Variable | `CLOUDFLARE_ACCOUNT_ID`    | `fe29207a28d7267afdc23baf5773e0f8` |
 | Secret   | `MAILLIST_NOTIFY_SECRET`   | same value as `NOTIFY_SECRET`      |
-| Secret   | `CLOUDFLARE_API_TOKEN`     | token with the permissions above   |
+| Secret   | `CLOUDFLARE_API_TOKEN`     | *deliberately unset* — see below   |
 
 `.github/workflows/maillist-deploy.yml` redeploys on every push to `worker/**`
 and skips (rather than fails) while the Cloudflare credentials are unset.
+
+`CLOUDFLARE_API_TOKEN` is intentionally **not** stored in GitHub: the token
+carries DNS:Edit and Workers:Edit on the whole zone, and keeping a credential
+of that blast radius in CI costs more than the automation saves for a worker
+that changes this rarely. Deploy from a workstation with `npm run deploy`.
+Revisit if this starts changing often.
 
 ## API
 

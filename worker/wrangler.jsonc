@@ -15,8 +15,8 @@
     {
       "binding": "DB",
       "database_name": "emoex-status-maillist",
-      // Filled in by `wrangler d1 create emoex-status-maillist` — see README.
-      "database_id": "__D1_DATABASE_ID__"
+      // Created 2026-08-22 in region APAC by `wrangler d1 create`.
+      "database_id": "22d3e73f-dbfd-4745-b3b3-2f80b87fcff9"
     }
   ],
 
