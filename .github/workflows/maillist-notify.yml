@@ -1,0 +1,70 @@
+name: MailList Notify
+
+# Fans incidents out to the public subscription list.
+#
+# Upptime and cloud-run-monitor.yml both signal incidents the same way: they
+# open a GitHub Issue labeled `status` when a service breaks and close it when
+# it recovers. That makes the issue lifecycle the one hook that covers every
+# monitor we have — HTTP probes and log-based Cloud Run checks alike.
+#
+# ⚠️ Issues created with the built-in GITHUB_TOKEN do NOT trigger workflows.
+# Both monitors therefore have to open issues with GH_PAT, or this never runs.
+on:
+  issues:
+    types: [opened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maillist-notify-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: contains(github.event.issue.labels.*.name, 'status')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fan out to subscribers
+        env:
+          # Repository variable, e.g. https://status-api.emoexai.com
+          ENDPOINT: ${{ vars.MAILLIST_ENDPOINT }}
+          # Repository secret; must equal the worker's NOTIFY_SECRET.
+          SECRET: ${{ secrets.MAILLIST_NOTIFY_SECRET }}
+          # Read through env, never inlined into the script: issue titles are
+          # attacker-influenceable text and `${{ }}` interpolation into `run`
+          # is a shell-injection hole.
+          ISSUE_ACTION: ${{ github.event.action }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ENDPOINT:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "::warning::MAILLIST_ENDPOINT or MAILLIST_NOTIFY_SECRET is unset — skipping notification."
+            exit 0
+          fi
+
+          payload="$(jq -nc \
+            --arg action "$ISSUE_ACTION" \
+            --argjson number "$ISSUE_NUMBER" \
+            --arg title "$ISSUE_TITLE" \
+            --arg url "$ISSUE_URL" \
+            '{action: $action, number: $number, title: $title, url: $url}')"
+
+          code="$(curl -sS --retry 3 --retry-delay 5 --retry-connrefused \
+            -o /tmp/notify-response.json -w '%{http_code}' \
+            -X POST "${ENDPOINT%/}/api/notify" \
+            -H "authorization: Bearer $SECRET" \
+            -H 'content-type: application/json' \
+            -d "$payload")"
+
+          echo "HTTP $code"
+          cat /tmp/notify-response.json
+          echo
+
+          if [ "$code" != "200" ]; then
+            echo "::error::MailList notify failed with HTTP $code"
+            exit 1
+          fi

@@ -1,0 +1,61 @@
+name: MailList Worker Deploy
+
+# Deploys worker/ to Cloudflare. Path-filtered, so the bot's constant
+# history/ commits never trigger it.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "worker/**"
+      - ".github/workflows/maillist-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maillist-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Skip rather than fail when the repo has not been wired up to
+      # Cloudflare yet — the first push of worker/ lands before the
+      # credentials do, and a red X on an unconfigured repo teaches people
+      # to ignore this workflow.
+      - name: Check Cloudflare credentials
+        id: creds
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set — skipping deploy. See worker/README.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          node-version: "22"
+
+      # No dependencies to install — node's built-in test runner.
+      - name: Test worker
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: worker
+        run: node --test
+
+      - name: Deploy worker
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy
