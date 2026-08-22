@@ -41,6 +41,179 @@ status-website:
   css: |
     main.container > section:last-of-type { display: none; }
 
+    /* --- MailList subscribe card ------------------------------------ */
+    /* Hidden until the API confirms it is up AND can actually send mail.
+       The `js` block below probes /api/health and only then adds
+       .maillist-on, so the page never shows a form that would drop the
+       address on the floor. */
+    #maillist { display: none; }
+
+    /* customFootHtml renders after <footer>, both inside Sapper's #sapper
+       wrapper (status-page/src/routes/_layout.svelte), so lifting the card
+       above the footer needs `order` — which needs a flex parent. Moving
+       the node with JS instead would fight Svelte hydration.
+
+       These rules are gated behind .maillist-on rather than applied to
+       #sapper directly: until the card is actually revealed the whole
+       block is inert and the page lays out exactly as it does today.
+       Flex containers do not collapse margins, and the Upptime footer
+       carries margin-top: 3rem, so an unconditional flex #sapper would
+       shift spacing on a page that currently works — for no benefit. */
+    #sapper.maillist-on { display: flex; flex-direction: column; }
+    #sapper.maillist-on > footer { order: 2; }
+    #sapper.maillist-on #maillist { display: block; }
+    #sapper.maillist-on > #maillist { order: 1; }
+
+    #maillist {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 45rem;
+      margin: 3rem auto 0;
+      padding: 1.5rem;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      border-radius: 0.5rem;
+    }
+    #maillist h2 { margin: 0 0 0.4rem; font-size: 1.15rem; }
+    #maillist p { margin: 0 0 1rem; opacity: 0.75; font-size: 0.92rem; line-height: 1.55; }
+    #maillist-form { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+    #maillist-email {
+      flex: 1 1 16rem;
+      min-width: 0;
+      padding: 0.6rem 0.75rem;
+      font: inherit;
+      font-size: 0.95rem;
+      color: inherit;
+      background: transparent;
+      border: 1px solid rgba(128, 128, 128, 0.45);
+      border-radius: 0.35rem;
+    }
+    #maillist-submit {
+      padding: 0.6rem 1.15rem;
+      font: inherit;
+      font-size: 0.95rem;
+      color: #fff;
+      background: #0b7285;
+      border: 0;
+      border-radius: 0.35rem;
+      cursor: pointer;
+    }
+    #maillist-submit:disabled { opacity: 0.6; cursor: default; }
+    #maillist-msg { margin: 0.85rem 0 0; font-size: 0.9rem; opacity: 1; }
+    #maillist-msg.maillist-ok { color: #2b8a3e; }
+    #maillist-msg.maillist-error { color: #c92a2a; }
+    @media (prefers-color-scheme: dark) {
+      #maillist-msg.maillist-ok { color: #51cf66; }
+      #maillist-msg.maillist-error { color: #ff8787; }
+    }
+
+  # Markup for the subscribe card. Rendered through Svelte's {@html}, i.e.
+  # innerHTML — so a <script> in here would NOT execute. All behaviour lives
+  # in `js` below, which is injected into <head> instead.
+  customFootHtml: |
+    <section id="maillist" aria-labelledby="maillist-title">
+      <h2 id="maillist-title">Subscribe to updates</h2>
+      <p>
+        Get an email whenever an EmoEx service goes down or recovers.
+        We send nothing else, and every message carries a one-click
+        unsubscribe link.
+      </p>
+      <form id="maillist-form">
+        <input
+          id="maillist-email"
+          type="email"
+          name="email"
+          required
+          autocomplete="email"
+          inputmode="email"
+          spellcheck="false"
+          placeholder="you@example.com"
+          aria-label="Email address"
+        />
+        <button id="maillist-submit" type="submit">Subscribe</button>
+      </form>
+      <p id="maillist-msg" role="status" aria-live="polite" hidden></p>
+    </section>
+
+  # Injected into <head>, so it runs before the form exists — hence the
+  # readyState guard. Kept dependency-free and ES5-ish on purpose: this has
+  # to work in whatever browser someone opens during an outage.
+  js: |
+    (function () {
+      var API = "https://status-api.emoexai.com";
+
+      function init() {
+        var form = document.getElementById("maillist-form");
+        if (!form || form.getAttribute("data-bound")) return;
+        form.setAttribute("data-bound", "1");
+
+        var section = document.getElementById("maillist");
+        var email = document.getElementById("maillist-email");
+        var button = document.getElementById("maillist-submit");
+        var message = document.getElementById("maillist-msg");
+
+        fetch(API + "/api/health", { cache: "no-store" })
+          .then(function (response) { return response.json(); })
+          .then(function (health) {
+            if (health && health.ok && health.subscribe_enabled && section) {
+              var root = document.getElementById("sapper");
+              if (root) root.classList.add("maillist-on");
+            }
+          })
+          .catch(function () {});
+
+        function say(text, kind) {
+          message.textContent = text;
+          message.className = kind || "";
+          message.hidden = false;
+        }
+
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          var value = (email.value || "").trim();
+          if (!value) return;
+
+          button.disabled = true;
+          say("Subscribing\u2026", "");
+
+          fetch(API + "/api/subscribe", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email: value })
+          })
+            .then(function (response) {
+              return response
+                .json()
+                .catch(function () { return {}; })
+                .then(function (body) { return { status: response.status, body: body }; });
+            })
+            .then(function (result) {
+              if (result.status === 200 && result.body.ok) {
+                say(result.body.message || "Check your inbox to confirm.", "maillist-ok");
+                form.reset();
+              } else if (result.status === 429) {
+                say("Too many attempts from your network. Please try again later.", "maillist-error");
+              } else if (result.body && result.body.error === "invalid_email") {
+                say("That does not look like a valid email address.", "maillist-error");
+              } else {
+                say("Something went wrong. Please try again later.", "maillist-error");
+              }
+            })
+            .catch(function () {
+              say("Could not reach the subscription service.", "maillist-error");
+            })
+            .then(function () {
+              button.disabled = false;
+            });
+        });
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
+    })();
+
 # How often to run probes (default cron is */5 * * * *, i.e. every 5 min).
 # Slow it down if you hit GitHub Actions quota.
 # assignees:
