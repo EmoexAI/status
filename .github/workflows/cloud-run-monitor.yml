@@ -45,5 +45,8 @@ jobs:
       - name: Run health checks
         env:
           GCLOUD_PROJECT: ${{ vars.GCP_PROJECT }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Must be GH_PAT, not GITHUB_TOKEN: issues opened with the built-in
+          # GITHUB_TOKEN do not trigger further workflow runs, which would
+          # leave maillist-notify.yml blind to every Cloud Run incident.
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: bash scripts/check-cloud-run-health.sh

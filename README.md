@@ -26,6 +26,34 @@ two questions in a sliding window:
 Either failure opens a GitHub Issue labeled `status`. Upptime treats open
 issues as live incidents and renders them on the status page.
 
+## Email subscriptions (MailList)
+
+Visitors can subscribe on the status page and get an email whenever a service
+goes down or recovers. The subscriber list, double opt-in, one-click
+unsubscribe and the fan-out all live in a Cloudflare Worker under `worker/` —
+outside GCP on purpose, for the same reason the rest of this repo is.
+
+**Sending is not switched on yet.** No mail provider has been chosen, so the
+worker reports `subscribe_enabled: false` and the status page keeps the
+subscribe card hidden. Nothing user-facing appears until a provider is wired
+up; see [`worker/README.md`](worker/README.md), which also explains why the
+existing `EmoEx-Task` Gmail SMTP path cannot be reused.
+
+How an incident reaches subscribers:
+
+```
+Upptime / cloud-run-monitor  →  GitHub Issue labeled `status`  (opened / closed)
+                             →  .github/workflows/maillist-notify.yml
+                             →  POST /api/notify  →  worker  →  subscribers
+```
+
+Using the issue lifecycle as the hook means every monitor is covered — HTTP
+probes and log-based Cloud Run checks alike — with no per-monitor wiring.
+
+⚠️ **Issues opened with the built-in `GITHUB_TOKEN` do not trigger workflows.**
+Both monitors therefore open issues with `GH_PAT`. If you ever switch one back
+to `GITHUB_TOKEN`, incident emails stop silently.
+
 ## First-time setup
 
 ### 1. Create the GitHub repo
@@ -121,12 +149,20 @@ in the chain is detected.
 │   ├── static-site.yml               # rebuild GitHub Pages site
 │   ├── setup.yml                     # bootstrap on first run
 │   ├── updates.yml                   # auto-update Upptime template
-│   └── cloud-run-monitor.yml         # custom — GCP Logging probes
+│   ├── cloud-run-monitor.yml         # custom — GCP Logging probes
+│   ├── maillist-notify.yml           # custom — incident → subscribers
+│   └── maillist-deploy.yml           # custom — deploy worker/ to Cloudflare
 ├── config/
 │   └── cloud-run-targets.yml         # Cloud Run service → log rules
 ├── scripts/
 │   ├── setup-gcp-wif.sh              # one-shot GCP WIF bootstrap
 │   ├── check-cloud-run-health.sh     # thin bash → python wrapper
 │   └── check_cloud_run_health.py     # actual log-query logic
+├── worker/                           # Cloudflare Worker — subscription list
+│   ├── src/index.js                  # routes: subscribe/confirm/unsubscribe/notify
+│   ├── src/mailer.js                 # mail provider adapter (none by default)
+│   ├── src/providers/resend.js       # worked example, off by default
+│   ├── schema.sql                    # D1 tables
+│   └── test/smoke.test.js            # no-dependency smoke tests
 └── history/                          # populated by Upptime — DO NOT edit by hand
 ```

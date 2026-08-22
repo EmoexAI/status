@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "emoex-status-maillist",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Custom domain — wrangler creates the proxied DNS record on emoexai.com
+  // for us. The API token needs Workers Scripts:Edit, Workers Routes:Edit,
+  // DNS:Edit and Zone:Read on that zone (see ../CLAUDE.md for the token we
+  // already keep for Cloudflare work).
+  "routes": [{ "pattern": "status-api.emoexai.com", "custom_domain": true }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "emoex-status-maillist",
+      // Created 2026-08-22 in region APAC by `wrangler d1 create`.
+      "database_id": "22d3e73f-dbfd-4745-b3b3-2f80b87fcff9"
+    }
+  ],
+
+  "vars": {
+    "BRAND_NAME": "EmoEx Status",
+    "STATUS_URL": "https://status.emoexai.com",
+    "API_BASE_URL": "https://status-api.emoexai.com",
+    "MAIL_FROM": "EmoEx Status <status@emoexai.com>",
+
+    // No mail provider is chosen yet. While this is "none" the worker
+    // answers subscribe_enabled:false on /api/health, the status page keeps
+    // the subscribe card hidden, and /api/subscribe refuses with 503 rather
+    // than storing addresses it can never confirm. Set to a provider name
+    // registered in src/mailer.js to switch sending on.
+    "MAIL_PROVIDER": "none",
+    // Origins allowed to POST /api/subscribe from a browser. The github.io
+    // host is the fallback the status page is served from before the CNAME
+    // is in place.
+    "ALLOWED_ORIGINS": "https://status.emoexai.com,https://emoexai.github.io"
+  }
+
+  // Secrets (never in this file — set with `wrangler secret put`):
+  //   NOTIFY_SECRET  — shared bearer token; must equal the repo secret
+  //                    MAILLIST_NOTIFY_SECRET used by maillist-notify.yml
+  //   plus whatever the chosen mail provider needs, e.g. RESEND_API_KEY
+}
