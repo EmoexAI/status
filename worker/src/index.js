@@ -154,6 +154,9 @@ async function handleSubscribe(request, env, mailer) {
     subject: `Confirm your ${brand(env)} subscription`,
     html: confirmHtml(env, confirmUrl),
     text: confirmText(env, confirmUrl),
+    // Reachable by anyone with the form, so it spends against the tighter of
+    // the two daily ceilings — see withDailyBudget in mailer.js.
+    kind: "transactional",
   });
 
   if (!result.ok) {
@@ -307,6 +310,9 @@ async function handleNotify(request, env, mailer) {
         "List-Unsubscribe": `<${unsubUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
+      // Spends against the total daily budget only, never the subscribe
+      // sub-cap: a flooded form must not be able to starve outage notices.
+      kind: "broadcast",
     };
   });
 

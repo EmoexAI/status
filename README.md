@@ -33,11 +33,18 @@ goes down or recovers. The subscriber list, double opt-in, one-click
 unsubscribe and the fan-out all live in a Cloudflare Worker under `worker/` —
 outside GCP on purpose, for the same reason the rest of this repo is.
 
-**Sending is not switched on yet.** No mail provider has been chosen, so the
-worker reports `subscribe_enabled: false` and the status page keeps the
-subscribe card hidden. Nothing user-facing appears until a provider is wired
-up; see [`worker/README.md`](worker/README.md), which also explains why the
-existing `EmoEx-Task` Gmail SMTP path cannot be reused.
+Mail goes out over **Gmail SMTP as `info@emoexai.com`**. Sending stays
+off — `subscribe_enabled: false`, subscribe card hidden — until the `GMAIL_*`
+secrets are set on the worker. Because Gmail's daily limit locks the account
+rather than throttling it, the worker enforces its own hard daily ceiling; see
+[`worker/README.md`](worker/README.md) for that and for the credential setup.
+
+The subscribe form itself is injected into the Upptime status page by
+`.upptimerc.yml` → `status-website.css` / `status-website.js`; Upptime owns the
+page template, so a card cannot simply be checked in as markup. That script
+asks `/api/health` first and renders nothing unless the worker answers
+`subscribe_enabled` — and every one of its failure paths is silent, because a
+broken subscription API must not take the status page down with it.
 
 How an incident reaches subscribers:
 
@@ -141,7 +148,7 @@ in the chain is detected.
 
 ```
 .
-├── .upptimerc.yml                    # Upptime config (sites, status page)
+├── .upptimerc.yml                    # Upptime config + the subscribe card (css/js)
 ├── .github/workflows/
 │   ├── uptime.yml                    # HTTP probes every 5 min
 │   ├── response-time.yml             # daily response-time stats
@@ -160,9 +167,12 @@ in the chain is detected.
 │   └── check_cloud_run_health.py     # actual log-query logic
 ├── worker/                           # Cloudflare Worker — subscription list
 │   ├── src/index.js                  # routes: subscribe/confirm/unsubscribe/notify
-│   ├── src/mailer.js                 # mail provider adapter (none by default)
+│   ├── src/mailer.js                 # provider adapter + hard daily send cap
+│   ├── src/providers/gmail.js        # Gmail SMTP — sends as info@emoexai.com
+│   ├── src/providers/gmail-oauth.js  # same contract over the Gmail API (off)
+│   ├── src/providers/mime.js         # MIME assembly shared by both
 │   ├── src/providers/resend.js       # worked example, off by default
 │   ├── schema.sql                    # D1 tables
-│   └── test/smoke.test.js            # no-dependency smoke tests
+│   └── test/                         # no-dependency tests (node --test)
 └── history/                          # populated by Upptime — DO NOT edit by hand
 ```
