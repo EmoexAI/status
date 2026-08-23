@@ -24,14 +24,34 @@
     "BRAND_NAME": "EmoEx Status",
     "STATUS_URL": "https://status.emoexai.com",
     "API_BASE_URL": "https://status-api.emoexai.com",
-    "MAIL_FROM": "EmoEx Status <status@emoexai.com>",
+    // ⚠️ Gmail rewrites From to the authenticated account unless the address
+    // is a *verified send-as alias* on it — and it does so silently, with a
+    // 200 response. Either leave this as info@ or add the alias in Gmail
+    // settings first, then check what actually arrives.
+    "MAIL_FROM": "EmoEx Status <info@emoexai.com>",
 
-    // No mail provider is chosen yet. While this is "none" the worker
-    // answers subscribe_enabled:false on /api/health, the status page keeps
-    // the subscribe card hidden, and /api/subscribe refuses with 503 rather
-    // than storing addresses it can never confirm. Set to a provider name
-    // registered in src/mailer.js to switch sending on.
-    "MAIL_PROVIDER": "none",
+    // Gmail over SMTP with an App Password, sending as info@emoexai.com —
+    // the same transport EmoEx-Task uses. Stays off until the GMAIL_*
+    // secrets below are set: without them the provider reports
+    // configured:false, /api/health answers subscribe_enabled:false, the
+    // status page keeps the subscribe card hidden and /api/subscribe refuses
+    // with 503. So deploying this ahead of the credentials is safe.
+    "MAIL_PROVIDER": "gmail",
+
+    // Hard daily ceilings — see withDailyBudget in src/mailer.js.
+    //
+    // Gmail's real limit is ~2000/day for the account, and crossing it locks
+    // info@ for ~24h. The window here is a fixed UTC day rather than a
+    // rolling one, so a burst across midnight can reach 2x the cap inside
+    // one 24h period: 800 keeps the worst case (1600) under the wall.
+    "MAIL_DAILY_CAP": "800",
+
+    // Confirmation mail only, a subset of the above. /api/subscribe is the
+    // attacker-reachable path, so it gets its own smaller ceiling; without
+    // it a flooded form burns the whole day on confirmations and the outage
+    // notice never goes out. The 650 left over covers roughly 80 subscribers
+    // through a day where all four monitors open and close (8 mails each).
+    "MAIL_DAILY_CAP_SUBSCRIBE": "150",
     // Origins allowed to POST /api/subscribe from a browser. The github.io
     // host is the fallback the status page is served from before the CNAME
     // is in place.
@@ -39,7 +59,9 @@
   }
 
   // Secrets (never in this file — set with `wrangler secret put`):
-  //   NOTIFY_SECRET  — shared bearer token; must equal the repo secret
-  //                    MAILLIST_NOTIFY_SECRET used by maillist-notify.yml
-  //   plus whatever the chosen mail provider needs, e.g. RESEND_API_KEY
+  //   NOTIFY_SECRET        — shared bearer token; must equal the repo secret
+  //                          MAILLIST_NOTIFY_SECRET used by maillist-notify.yml
+  //   GMAIL_USER           — info@emoexai.com
+  //   GMAIL_APP_PASSWORD   — the 16-character App Password for that account
+  //                          (same kind EmoEx-Task uses). Spaces are stripped.
 }

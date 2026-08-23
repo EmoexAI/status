@@ -38,8 +38,212 @@ status-website:
   # Hide the "Past Incidents" section on the home page. It is rendered by
   # the Incidents component as the last <section> inside main.container
   # (after ActiveIncidents, ActiveScheduled, LiveStatus, Scheduled).
+  #
+  # ⚠️ The subscribe card below is deliberately a <div>, not a <section>:
+  # appending a <section> to main.container would steal `:last-of-type` from
+  # Incidents and un-hide it.
   css: |
     main.container > section:last-of-type { display: none; }
+
+    /* Subscribe card. Uses Upptime's own theme tokens (themes/light.css and
+       themes/dark.css) so it follows the visitor's colour scheme for free. */
+    #maillist {
+      background: var(--card-background-color);
+      border: 1px solid var(--card-border-color);
+      border-radius: 6px;
+      padding: 1.25rem 1.5rem;
+      margin: 2rem 0 3rem;
+    }
+    #maillist h3 { margin: 0 0 0.35rem; font-size: 1.1rem; }
+    #maillist .maillist-lead { margin: 0 0 1rem; font-size: 0.9rem; opacity: 0.75; }
+    #maillist form { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    #maillist input[type="email"] {
+      flex: 1 1 16rem;
+      min-width: 0;
+      padding: 0.55rem 0.75rem;
+      font: inherit;
+      color: var(--body-text-color);
+      background: var(--body-background-color);
+      border: 1px solid var(--card-border-color);
+      border-radius: 4px;
+    }
+    #maillist button {
+      padding: 0.55rem 1.1rem;
+      font: inherit;
+      cursor: pointer;
+      color: var(--submit-button-color);
+      background: var(--submit-button-background-color);
+      border: 1px solid var(--submit-button-border-color);
+      border-radius: 4px;
+    }
+    #maillist button[disabled] { opacity: 0.6; cursor: default; }
+    #maillist .maillist-msg { margin: 0.85rem 0 0; font-size: 0.9rem; }
+    #maillist .maillist-msg:empty { display: none; }
+    #maillist .maillist-msg.ok { color: var(--up-border-left-color); }
+    #maillist .maillist-msg.err { color: var(--tag-down-background-color); }
+
+  # Subscribe card, rendered client-side by the worker at status-api.
+  #
+  # It appears only when /api/health answers subscribe_enabled — a form that
+  # drops the address on the floor is worse than no form, and that flag is
+  # false until the GMAIL_* secrets are set (see worker/README.md).
+  #
+  # ⚠️ Every failure path below is silent. This page has to stay useful during
+  # an outage, and that includes an outage of the subscription API itself, so
+  # nothing here may throw into the page or block rendering.
+  js: |
+    (function () {
+      "use strict";
+
+      var API = "https://status-api.emoexai.com";
+      var CARD_ID = "maillist";
+      var MOUNT_TIMEOUT_MS = 20000;   // the page is a SPA; <main> can land late
+      var REQUEST_TIMEOUT_MS = 8000;  // a hung API must not freeze the button
+
+      function request(path, options) {
+        var opts = options || {};
+        var controller = typeof AbortController === "function" ? new AbortController() : null;
+        var timer = null;
+        if (controller) {
+          opts.signal = controller.signal;
+          timer = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+        }
+        function done() { if (timer) clearTimeout(timer); }
+        return fetch(API + path, opts).then(function (response) {
+          done();
+          return response.json().catch(function () { return {}; }).then(function (body) {
+            return { status: response.status, body: body };
+          });
+        }, function (error) {
+          done();
+          throw error;
+        });
+      }
+
+      function whenContainer(callback) {
+        var found = document.querySelector("main.container");
+        if (found) return callback(found);
+
+        var giveUp;
+        var observer = new MutationObserver(function () {
+          var node = document.querySelector("main.container");
+          if (!node) return;
+          observer.disconnect();
+          clearTimeout(giveUp);
+          callback(node);
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        giveUp = setTimeout(function () { observer.disconnect(); }, MOUNT_TIMEOUT_MS);
+      }
+
+      function say(node, text, kind) {
+        node.textContent = text;
+        node.className = kind ? "maillist-msg " + kind : "maillist-msg";
+      }
+
+      function errorText(result) {
+        switch (result.body && result.body.error) {
+          case "invalid_email":
+            return "That does not look like an email address.";
+          case "rate_limited":
+            return "Too many attempts from your network. Try again in an hour.";
+          case "subscriptions_closed":
+            return "Subscriptions are not open yet.";
+          case "send_failed":
+            return "We could not send the confirmation email. Please try again later.";
+          default:
+            return "Something went wrong. Please try again later.";
+        }
+      }
+
+      function submit(input, button, message) {
+        var email = input.value.trim();
+        if (!email) return;
+
+        button.disabled = true;
+        say(message, "Sending…", "");
+
+        request("/api/subscribe", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: email })
+        }).then(function (result) {
+          if (result.status === 200) {
+            // The worker answers identically for a new, a pending and an
+            // already-confirmed address, so this text cannot be used to test
+            // whether someone is on the list. Show it verbatim.
+            say(message, result.body.message || "Check your inbox to confirm.", "ok");
+            input.value = "";
+            return;
+          }
+          say(message, errorText(result), "err");
+        }).catch(function () {
+          say(message, "Could not reach the subscription service. Please try again later.", "err");
+        }).then(function () {
+          button.disabled = false;
+        });
+      }
+
+      function build() {
+        var card = document.createElement("div");
+        card.id = CARD_ID;
+
+        var heading = document.createElement("h3");
+        heading.textContent = "Get notified by email";
+        card.appendChild(heading);
+
+        var lead = document.createElement("p");
+        lead.className = "maillist-lead";
+        lead.textContent =
+          "One email when a service goes down, one when it recovers — nothing else. " +
+          "Confirm the address once; unsubscribe from any email in a click.";
+        card.appendChild(lead);
+
+        var form = document.createElement("form");
+
+        var input = document.createElement("input");
+        input.type = "email";
+        input.required = true;
+        input.autocomplete = "email";
+        input.placeholder = "you@example.com";
+        input.setAttribute("aria-label", "Email address");
+        form.appendChild(input);
+
+        var button = document.createElement("button");
+        button.type = "submit";
+        button.textContent = "Subscribe";
+        form.appendChild(button);
+
+        card.appendChild(form);
+
+        var message = document.createElement("p");
+        message.className = "maillist-msg";
+        message.setAttribute("role", "status");
+        message.setAttribute("aria-live", "polite");
+        card.appendChild(message);
+
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          submit(input, button, message);
+        });
+
+        return card;
+      }
+
+      try {
+        request("/api/health").then(function (result) {
+          if (result.status !== 200 || !result.body.subscribe_enabled) return;
+          whenContainer(function (container) {
+            if (document.getElementById(CARD_ID)) return;
+            container.appendChild(build());
+          });
+        }).catch(function () {
+          /* Subscription API unreachable: show no card, break nothing. */
+        });
+      } catch (error) {
+        /* Old browser, missing fetch, anything at all: never break the page. */
+      }
+    })();
 
 # How often to run probes (default cron is */5 * * * *, i.e. every 5 min).
 # Slow it down if you hit GitHub Actions quota.
