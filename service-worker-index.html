@@ -1,4 +1,4 @@
-<!DOCTYPE html> <html lang=en> <head> <meta charset=utf-8> <meta content="width=device-width,initial-scale=1" name=viewport> <meta content=#333333 name=theme-color> <base href=/ > <link href=manifest.json rel=manifest crossorigin=use-credentials> <script>__SAPPER__={baseUrl:"",preloaded:[void 0]};if('serviceWorker' in navigator)navigator.serviceWorker.register('/service-worker.js');(function(){try{eval("async function x(){}");var main="/client/client.9ded05bd.js"}catch(e){main="/client/legacy/client.8c11c923.js"};var s=document.createElement("script");try{new Function("if(0)import('')")();s.src=main;s.type="module";s.crossOrigin="use-credentials";}catch(e){s.src="/client/shimport@2.0.5.js";s.setAttribute("data-main",main);}document.head.appendChild(s);}());</script> <link href=client/client-31a52aa5.css rel=stylesheet><link href=client/createOctokit-a85f76c7.css rel=stylesheet><link href=client/index-b0b6455a.css rel=stylesheet> <script>// If `prefers-color-scheme` is not supported, fall back to light mode.
+<!DOCTYPE html> <html lang=en> <head> <meta charset=utf-8> <meta content="width=device-width,initial-scale=1" name=viewport> <meta content=#333333 name=theme-color> <base href=/ > <link href=manifest.json rel=manifest crossorigin=use-credentials> <script>__SAPPER__={baseUrl:"",preloaded:[void 0]};if('serviceWorker' in navigator)navigator.serviceWorker.register('/service-worker.js');(function(){try{eval("async function x(){}");var main="/client/client.b15f3b78.js"}catch(e){main="/client/legacy/client.bec14de4.js"};var s=document.createElement("script");try{new Function("if(0)import('')")();s.src=main;s.type="module";s.crossOrigin="use-credentials";}catch(e){s.src="/client/shimport@2.0.5.js";s.setAttribute("data-main",main);}document.head.appendChild(s);}());</script> <link href=client/client-31a52aa5.css rel=stylesheet><link href=client/createOctokit-a85f76c7.css rel=stylesheet><link href=client/index-b0b6455a.css rel=stylesheet> <script>// If `prefers-color-scheme` is not supported, fall back to light mode.
       // In this case, light.css will be downloaded with `highest` priority.
       if (typeof window !== "undefined" && typeof document !== "undefined" && "matchMedia" in window && window.matchMedia('(prefers-color-scheme: dark)').media === 'not all') {
         document.documentElement.style.display = 'none';
@@ -6,7 +6,158 @@
           'beforeend',
           '<link rel="stylesheet" href={`${config.path}/themes/light.css`} onload="document.documentElement.style.display = \'\'">',
         );
-      } </script> <link href=https://status.emoexai.com/themes/light.css rel=stylesheet media=(prefers-color-scheme:light)> <link href=https://status.emoexai.com/themes/dark.css rel=stylesheet media=(prefers-color-scheme:dark)><link href=https://status.emoexai.com/global.css rel=stylesheet><link href=https://raw.githubusercontent.com/upptime/upptime/master/assets/upptime-icon.svg rel=icon type=image/svg><link href=/logo-192.png rel=icon type=image/png><style>main.container>section:last-of-type{display:none}</style> <link href=/client/client.9ded05bd.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/client-31a52aa5.css rel=preload as=style><link href=/client/index.28ecd0aa.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit.875f57bb.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/inject_styles.803b7e80.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit-a85f76c7.css rel=preload as=style><link href=/client/index-b0b6455a.css rel=preload as=style></head> <body> <div id=sapper> <nav class=svelte-a08hsz><div class="svelte-a08hsz container"> <ul class=svelte-a08hsz><li><a href=/ class=svelte-a08hsz target=_self>Status</a> </li> </ul></div> </nav> <main class=container></main> <footer class=svelte-jbr799><p>This page is <a href=https://github.com/EmoexAI/status>open source</a>, powered by <a href=https://upptime.js.org>Upptime</a></p> </footer></div> <script> try {
+      } </script> <link href=https://status.emoexai.com/themes/light.css rel=stylesheet media=(prefers-color-scheme:light)> <link href=https://status.emoexai.com/themes/dark.css rel=stylesheet media=(prefers-color-scheme:dark)><link href=https://status.emoexai.com/global.css rel=stylesheet><link href=https://raw.githubusercontent.com/upptime/upptime/master/assets/upptime-icon.svg rel=icon type=image/svg><link href=/logo-192.png rel=icon type=image/png><style>main.container>section:last-of-type{display:none}#maillist{background:var(--card-background-color);border:1px solid var(--card-border-color);border-radius:6px;padding:1.25rem 1.5rem;margin:2rem 0 3rem}#maillist h3{margin:0 0 .35rem;font-size:1.1rem}#maillist .maillist-lead{margin:0 0 1rem;font-size:.9rem;opacity:.75}#maillist form{display:flex;flex-wrap:wrap;gap:.5rem}#maillist input[type=email]{flex:1 1 16rem;min-width:0;padding:.55rem .75rem;font:inherit;color:var(--body-text-color);background:var(--body-background-color);border:1px solid var(--card-border-color);border-radius:4px}#maillist button{padding:.55rem 1.1rem;font:inherit;cursor:pointer;color:var(--submit-button-color);background:var(--submit-button-background-color);border:1px solid var(--submit-button-border-color);border-radius:4px}#maillist button[disabled]{opacity:.6;cursor:default}#maillist .maillist-msg{margin:.85rem 0 0;font-size:.9rem}#maillist .maillist-msg:empty{display:none}#maillist .maillist-msg.ok{color:var(--up-border-left-color)}#maillist .maillist-msg.err{color:var(--tag-down-background-color)}</style><script>(function () {
+  "use strict";
+
+  var API = "https://status-api.emoexai.com";
+  var CARD_ID = "maillist";
+  var MOUNT_TIMEOUT_MS = 20000;   // the page is a SPA; <main> can land late
+  var REQUEST_TIMEOUT_MS = 8000;  // a hung API must not freeze the button
+
+  function request(path, options) {
+    var opts = options || {};
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = null;
+    if (controller) {
+      opts.signal = controller.signal;
+      timer = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+    }
+    function done() { if (timer) clearTimeout(timer); }
+    return fetch(API + path, opts).then(function (response) {
+      done();
+      return response.json().catch(function () { return {}; }).then(function (body) {
+        return { status: response.status, body: body };
+      });
+    }, function (error) {
+      done();
+      throw error;
+    });
+  }
+
+  function whenContainer(callback) {
+    var found = document.querySelector("main.container");
+    if (found) return callback(found);
+
+    var giveUp;
+    var observer = new MutationObserver(function () {
+      var node = document.querySelector("main.container");
+      if (!node) return;
+      observer.disconnect();
+      clearTimeout(giveUp);
+      callback(node);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    giveUp = setTimeout(function () { observer.disconnect(); }, MOUNT_TIMEOUT_MS);
+  }
+
+  function say(node, text, kind) {
+    node.textContent = text;
+    node.className = kind ? "maillist-msg " + kind : "maillist-msg";
+  }
+
+  function errorText(result) {
+    switch (result.body && result.body.error) {
+      case "invalid_email":
+        return "That does not look like an email address.";
+      case "rate_limited":
+        return "Too many attempts from your network. Try again in an hour.";
+      case "subscriptions_closed":
+        return "Subscriptions are not open yet.";
+      case "send_failed":
+        return "We could not send the confirmation email. Please try again later.";
+      default:
+        return "Something went wrong. Please try again later.";
+    }
+  }
+
+  function submit(input, button, message) {
+    var email = input.value.trim();
+    if (!email) return;
+
+    button.disabled = true;
+    say(message, "Sending…", "");
+
+    request("/api/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: email })
+    }).then(function (result) {
+      if (result.status === 200) {
+        // The worker answers identically for a new, a pending and an
+        // already-confirmed address, so this text cannot be used to test
+        // whether someone is on the list. Show it verbatim.
+        say(message, result.body.message || "Check your inbox to confirm.", "ok");
+        input.value = "";
+        return;
+      }
+      say(message, errorText(result), "err");
+    }).catch(function () {
+      say(message, "Could not reach the subscription service. Please try again later.", "err");
+    }).then(function () {
+      button.disabled = false;
+    });
+  }
+
+  function build() {
+    var card = document.createElement("div");
+    card.id = CARD_ID;
+
+    var heading = document.createElement("h3");
+    heading.textContent = "Get notified by email";
+    card.appendChild(heading);
+
+    var lead = document.createElement("p");
+    lead.className = "maillist-lead";
+    lead.textContent =
+      "One email when a service goes down, one when it recovers — nothing else. " +
+      "Confirm the address once; unsubscribe from any email in a click.";
+    card.appendChild(lead);
+
+    var form = document.createElement("form");
+
+    var input = document.createElement("input");
+    input.type = "email";
+    input.required = true;
+    input.autocomplete = "email";
+    input.placeholder = "you@example.com";
+    input.setAttribute("aria-label", "Email address");
+    form.appendChild(input);
+
+    var button = document.createElement("button");
+    button.type = "submit";
+    button.textContent = "Subscribe";
+    form.appendChild(button);
+
+    card.appendChild(form);
+
+    var message = document.createElement("p");
+    message.className = "maillist-msg";
+    message.setAttribute("role", "status");
+    message.setAttribute("aria-live", "polite");
+    card.appendChild(message);
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      submit(input, button, message);
+    });
+
+    return card;
+  }
+
+  try {
+    request("/api/health").then(function (result) {
+      if (result.status !== 200 || !result.body.subscribe_enabled) return;
+      whenContainer(function (container) {
+        if (document.getElementById(CARD_ID)) return;
+        container.appendChild(build());
+      });
+    }).catch(function () {
+      /* Subscription API unreachable: show no card, break nothing. */
+    });
+  } catch (error) {
+    /* Old browser, missing fetch, anything at all: never break the page. */
+  }
+})(); </script> <link href=/client/client.b15f3b78.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/client-31a52aa5.css rel=preload as=style><link href=/client/index.c9324d68.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit.8717c453.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/inject_styles.803b7e80.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit-a85f76c7.css rel=preload as=style><link href=/client/index-b0b6455a.css rel=preload as=style></head> <body> <div id=sapper> <nav class=svelte-a08hsz><div class="svelte-a08hsz container"> <ul class=svelte-a08hsz><li><a href=/ class=svelte-a08hsz target=_self>Status</a> </li> </ul></div> </nav> <main class=container></main> <footer class=svelte-jbr799><p>This page is <a href=https://github.com/EmoexAI/status>open source</a>, powered by <a href=https://upptime.js.org>Upptime</a></p> </footer></div> <script> try {
         if (typeof window !== "undefined" && window.navigator && navigator.serviceWorker) {
           navigator.serviceWorker.getRegistrations().then(function (registrations) {
             for (let registration of registrations) {
