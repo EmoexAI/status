@@ -14,29 +14,41 @@
 # * More by Anand Chowdhary: https://anandchowdhary.com
 
 
-name: Summary CI
+name: Static Site CI
 on:
+  push:
+    paths:
+      - "assets/**"
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 1 * * *"
   repository_dispatch:
-    types: [summary]
+    types: [static_site]
   workflow_dispatch:
 concurrency:
   group: ${{ github.repository }}-${{ github.head_ref || github.ref_name }}-upptime
   cancel-in-progress: false
 jobs:
   release:
-    name: Generate README
+    name: Build and deploy site
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GH_PAT || github.token }}
-      - name: Update summary in README
+      - name: Generate site
         uses: upptime/uptime-monitor@v1.43.15
         with:
-          command: "readme"
+          command: "site"
         env:
           GH_PAT: ${{ secrets.GH_PAT || github.token }}
+      - uses: peaceiris/actions-gh-pages@v4
+        name: GitHub Pages Deploy
+        with:
+          github_token: ${{ secrets.GH_PAT || github.token }}
+          publish_dir: "site/status-page/__sapper__/export/"
+          force_orphan: "false"
+          user_name: "Upptime Bot"
+          user_email: "73812536+upptime-bot@users.noreply.github.com"

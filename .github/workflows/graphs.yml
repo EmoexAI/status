@@ -14,19 +14,19 @@
 # * More by Anand Chowdhary: https://anandchowdhary.com
 
 
-name: Summary CI
+name: Graphs CI
 on:
   schedule:
     - cron: "0 0 * * *"
   repository_dispatch:
-    types: [summary]
+    types: [graphs]
   workflow_dispatch:
 concurrency:
   group: ${{ github.repository }}-${{ github.head_ref || github.ref_name }}-upptime
   cancel-in-progress: false
 jobs:
   release:
-    name: Generate README
+    name: Generate graphs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,9 +34,13 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GH_PAT || github.token }}
-      - name: Update summary in README
+      - name: Setup Node.js for graphs
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - name: Generate graphs
         uses: upptime/uptime-monitor@v1.43.15
         with:
-          command: "readme"
+          command: "graphs"
         env:
           GH_PAT: ${{ secrets.GH_PAT || github.token }}
