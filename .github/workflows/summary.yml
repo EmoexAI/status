@@ -13,7 +13,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # Checks out with GH_PAT rather than the default GITHUB_TOKEN so the
+      # push below runs as a real user. github-actions[bot] cannot be put on
+      # any branch-protection bypass list, so a GITHUB_TOKEN push is rejected
+      # outright once master is protected.
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
       - uses: upptime/uptime-monitor@master
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
