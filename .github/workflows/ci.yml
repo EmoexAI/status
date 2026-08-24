@@ -1,0 +1,109 @@
+name: CI
+
+# Exposes the org-wide `ci-ok` gate for this repo. See EmoexAI/ci-shared for
+# the contract: exactly one required check per repo, always named `ci-ok`.
+#
+# ⚠️ This is the one repo that cannot *call* ci-shared. Reusable workflows in
+# a private repo resolve only for private or internal callers in the same org,
+# and `status` is public — the run dies before any job is created, with
+# "workflow was not found" and no `ci-ok` for the ruleset to require. So the
+# worker job below is ci-shared's node.yml inlined. Changes to node.yml do not
+# reach this file; that is the price of the repo being public.
+#
+# `push` matters even though every Upptime commit carries `[skip ci]`: the
+# bot's commits are skipped by Actions, but a human pushing through the
+# ruleset bypass still gets checked.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches wrangler 4's floor and the org default in ci-shared.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # --if-present goes before the script name, as in ci-shared: this repo
+      # has neither a lint nor a typecheck script today, and both should skip
+      # rather than fail if one is added later under either spelling.
+      - name: Lint
+        run: npm run --if-present lint
+
+      - name: Typecheck
+        run: npm run --if-present typecheck
+
+      # No build step on purpose: the worker ships as ES modules and wrangler
+      # bundles it at deploy time.
+      - name: Test
+        run: npm run --if-present test
+
+  # The parts of this repo that are not the worker are configuration: the
+  # Upptime config, the Cloud Run target list, and the health-check scripts.
+  # Nothing compiles them, so a typo here is only found when a monitor
+  # silently stops running.
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyyaml
+
+      # history/ is bot-generated and rewritten every five minutes; it is
+      # data, not configuration, and does not belong in a correctness check.
+      - name: Parse every hand-written YAML file
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          import yaml
+
+          failed = False
+          for path in sorted(Path(".").rglob("*.y*ml")):
+              if path.parts[0] in {".git", "history"}:
+                  continue
+              try:
+                  list(yaml.safe_load_all(path.read_text()))
+              except yaml.YAMLError as exc:
+                  print(f"::error file={path}::{exc}")
+                  failed = True
+              else:
+                  print(f"ok {path}")
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Compile the health-check scripts
+        run: python -m compileall -q scripts/
+
+      - name: Check shell syntax
+        run: for f in scripts/*.sh; do bash -n "$f" && echo "ok $f"; done
+
+  # Single required status check for this repo. Keep the name stable — it is
+  # what the branch ruleset points at.
+  ci-ok:
+    if: always()
+    needs: [worker, config]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
