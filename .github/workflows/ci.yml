@@ -1,9 +1,17 @@
 name: CI
 
-# Exposes the org-wide `ci-ok` gate for this repo. See EmoexAI/ci-shared.
+# Exposes the org-wide `ci-ok` gate for this repo. See EmoexAI/ci-shared for
+# the contract: exactly one required check per repo, always named `ci-ok`.
 #
-# `push` matters here even though every Upptime commit carries `[skip ci]`:
-# the bot's commits are skipped by Actions, but a human pushing through the
+# ⚠️ This is the one repo that cannot *call* ci-shared. Reusable workflows in
+# a private repo resolve only for private or internal callers in the same org,
+# and `status` is public — the run dies before any job is created, with
+# "workflow was not found" and no `ci-ok` for the ruleset to require. So the
+# worker job below is ci-shared's node.yml inlined. Changes to node.yml do not
+# reach this file; that is the price of the repo being public.
+#
+# `push` matters even though every Upptime commit carries `[skip ci]`: the
+# bot's commits are skipped by Actions, but a human pushing through the
 # ruleset bypass still gets checked.
 on:
   pull_request:
@@ -15,14 +23,36 @@ permissions:
 
 jobs:
   worker:
-    uses: EmoexAI/ci-shared/.github/workflows/node.yml@v1
-    with:
-      package-manager: npm
-      working-directory: worker
-      # The worker ships as ES modules and wrangler bundles at deploy time,
-      # so there is no build script. node.yml runs `npm run build` without
-      # `--if-present`, which would fail outright rather than skip.
-      run-build: false
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches wrangler 4's floor and the org default in ci-shared.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # --if-present goes before the script name, as in ci-shared: this repo
+      # has neither a lint nor a typecheck script today, and both should skip
+      # rather than fail if one is added later under either spelling.
+      - name: Lint
+        run: npm run --if-present lint
+
+      - name: Typecheck
+        run: npm run --if-present typecheck
+
+      # No build step on purpose: the worker ships as ES modules and wrangler
+      # bundles it at deploy time.
+      - name: Test
+        run: npm run --if-present test
 
   # The parts of this repo that are not the worker are configuration: the
   # Upptime config, the Cloud Run target list, and the health-check scripts.
@@ -69,7 +99,7 @@ jobs:
         run: for f in scripts/*.sh; do bash -n "$f" && echo "ok $f"; done
 
   # Single required status check for this repo. Keep the name stable — it is
-  # what the branch ruleset points at. See EmoexAI/ci-shared for the contract.
+  # what the branch ruleset points at.
   ci-ok:
     if: always()
     needs: [worker, config]
