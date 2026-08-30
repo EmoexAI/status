@@ -10,17 +10,29 @@
  * need the mail. Putting the notifier on the infrastructure it reports on
  * would make it fail at the only moment it matters.
  *
- * ⚠️ No mail provider is wired up yet (MAIL_PROVIDER defaults to "none").
- * Everything else works; sending is a contained adapter — see mailer.js.
- * While unconfigured, /api/health advertises subscribe_enabled:false and the
- * status page keeps the subscribe card hidden, so nothing user-facing breaks.
+ * The live Wrangler config selects Gmail; sending remains a contained adapter
+ * behind MAIL_PROVIDER — see mailer.js. If a deployment has no provider or is
+ * missing its credentials, /api/health advertises subscribe_enabled:false and
+ * the status page keeps the subscribe card hidden, so nothing user-facing
+ * pretends to work.
+ *
+ * ⚠️ This worker serves no user-visible HTML. Everything a person sees lives
+ * on status.emoexai.com, which is the page they already trust and the one that
+ * stays up during an outage. Mail therefore links to
+ * `status.emoexai.com/#subscription=<action>&token=<64hex>`, and the token
+ * rides in the *fragment* — never sent to a server, so it stays out of the
+ * status site's request logs and out of any Referer. The legacy GETs here only
+ * redirect there; they mutate nothing, because a link preview, a mail scanner
+ * or a prefetch must not be able to confirm or unsubscribe anyone.
  *
  * Routes
  *   GET    /api/health                       → { ok, subscribe_enabled }
  *   POST   /api/subscribe                    → double opt-in, sends confirm mail
- *   GET    /api/confirm?token=...            → confirms, renders an HTML page
- *   GET    /api/unsubscribe?token=...        → renders an HTML page
- *   POST   /api/unsubscribe?token=...        → RFC 8058 one-click, returns JSON
+ *   POST   /api/confirm       { token }      → pending → confirmed
+ *   GET    /api/confirm?token=...            → 303 to the status page, no mutation
+ *   POST   /api/unsubscribe   { token }      → from the status page, returns JSON
+ *   POST   /api/unsubscribe?token=...        → RFC 8058 one-click (mail clients)
+ *   GET    /api/unsubscribe?token=...        → 303 to the status page, no mutation
  *   POST   /api/notify        (Bearer auth)  → fan-out to confirmed subscribers
  */
 
@@ -29,6 +41,10 @@ import { createMailer } from "./mailer.js";
 // Deliberately loose: the authoritative check is whether the confirmation
 // mail actually arrives. This only rejects input that cannot be an address.
 const EMAIL_RE = /^[^\s@,;:<>"]+@[^\s@,;:<>"]+\.[^\s@,;:<>"]{2,}$/;
+
+// Exactly what newToken() produces. Checked before a token is put into a
+// redirect or a query, so nothing else can be smuggled through those.
+const TOKEN_RE = /^[0-9a-f]{64}$/;
 
 const SUBSCRIBE_PER_IP_PER_HOUR = 5;
 const SUBSCRIBE_GLOBAL_PER_HOUR = 200;
@@ -73,8 +89,8 @@ async function route(request, env, url) {
   if (request.method === "POST" && path === "/api/subscribe") {
     return handleSubscribe(request, env, mailer);
   }
-  if (request.method === "GET" && path === "/api/confirm") {
-    return handleConfirm(url, env);
+  if (path === "/api/confirm" && (request.method === "GET" || request.method === "POST")) {
+    return handleConfirm(request, url, env);
   }
   if (path === "/api/unsubscribe" && (request.method === "GET" || request.method === "POST")) {
     return handleUnsubscribe(request, url, env);
@@ -132,12 +148,38 @@ async function handleSubscribe(request, env, mailer) {
     // pointed at whatever address the attacker types.
     if (nowUnix - existing.last_sent_at < CONFIRM_RESEND_COOLDOWN_S) return genericSubscribeOk();
 
-    confirmToken = existing.confirm_token;
-    await env.DB.prepare(
-      "UPDATE subscribers SET status = 'pending', unsubscribed_at = NULL WHERE id = ?1"
-    )
-      .bind(existing.id)
-      .run();
+    if (existing.status === "unsubscribed") {
+      // Coming back from an unsubscribe is the one case that needs a fresh
+      // token. The unsubscribe rotated confirm_token precisely so no link
+      // still sitting in an inbox could put this address back on the list;
+      // handing that rotated value out again would undo that.
+      confirmToken = newToken();
+
+      // Conditional on the row still being unsubscribed, so two racing
+      // resubscribes cannot both mint a token: the second UPDATE matches
+      // nothing. Without the guard the loser would overwrite the winner's
+      // token and both would mail, leaving the winner's link dead on arrival
+      // — the row only keeps whichever token was written last.
+      const revived = await env.DB.prepare(
+        "UPDATE subscribers SET status = 'pending', unsubscribed_at = NULL, confirm_token = ?2 " +
+          "WHERE id = ?1 AND status = 'unsubscribed'"
+      )
+        .bind(existing.id, confirmToken)
+        .run();
+
+      // Lost the race. The winner is mailing this same address right now, so
+      // answer the usual generic success and send nothing.
+      if (!revived.meta || revived.meta.changes === 0) return genericSubscribeOk();
+    } else {
+      // Still pending: re-send the link they already have and write nothing.
+      // Rotating here buys no security — the row is already pending, so the
+      // outstanding token grants exactly what this request is asking for —
+      // and it costs plenty: if the send below fails we would have destroyed
+      // the one working link in their inbox and delivered no replacement.
+      // Writing nothing also means a confirm landing mid-request cannot be
+      // knocked back to pending by a write that raced past it.
+      confirmToken = existing.confirm_token;
+    }
   } else {
     confirmToken = newToken();
     await env.DB.prepare(
@@ -148,7 +190,7 @@ async function handleSubscribe(request, env, mailer) {
       .run();
   }
 
-  const confirmUrl = `${apiBase(env)}/api/confirm?token=${confirmToken}`;
+  const confirmUrl = actionUrl(env, "confirm", confirmToken);
   const result = await mailer.send({
     to: email,
     subject: `Confirm your ${brand(env)} subscription`,
@@ -188,61 +230,99 @@ function genericSubscribeOk() {
 /* Confirm / unsubscribe                                               */
 /* ------------------------------------------------------------------ */
 
-async function handleConfirm(url, env) {
-  const token = (url.searchParams.get("token") || "").trim();
-  if (!token) return htmlPage(env, "Invalid link", "This confirmation link is missing its token.", 400);
-
-  const row = await env.DB.prepare("SELECT id, status FROM subscribers WHERE confirm_token = ?1")
-    .bind(token)
-    .first();
-
-  if (!row) {
-    return htmlPage(env, "Link not recognised", "This confirmation link is not valid. Try subscribing again.", 404);
-  }
-  // The token is kept rather than consumed, so a second click reads as
-  // "already done" instead of a dead link.
-  if (row.status === "confirmed") {
-    return htmlPage(env, "Already confirmed", "You are on the list — nothing more to do.");
+async function handleConfirm(request, url, env) {
+  // GET is a link click: hand the token to the status page and mutate nothing.
+  // Mail scanners, link previews and prefetchers all issue GETs, and any of
+  // them would otherwise complete a double opt-in that no human ever agreed to.
+  if (request.method === "GET") {
+    return seeOther(env, "confirm", url.searchParams.get("token"));
   }
 
-  await env.DB.prepare(
-    "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?2, unsubscribed_at = NULL WHERE id = ?1"
-  )
-    .bind(row.id, new Date().toISOString())
-    .run();
+  const body = await readBody(request);
+  const token = typeof body.token === "string" ? body.token.trim() : "";
+  if (!TOKEN_RE.test(token)) return json({ ok: false, error: "invalid_token" }, { status: 400 });
 
-  return htmlPage(
-    env,
-    "Subscription confirmed",
-    "You will get an email whenever an EmoEx service goes down or recovers. Every message carries an unsubscribe link."
-  );
-}
-
-async function handleUnsubscribe(request, url, env) {
-  const token = (url.searchParams.get("token") || "").trim();
-  const oneClick = request.method === "POST"; // RFC 8058
-
-  if (!token) {
-    return oneClick
-      ? json({ ok: false, error: "missing_token" }, { status: 400 })
-      : htmlPage(env, "Invalid link", "This unsubscribe link is missing its token.", 400);
-  }
-
-  const result = await env.DB.prepare(
-    "UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ?2 WHERE unsubscribe_token = ?1"
+  // Conditional and atomic. `status = 'pending'` in the WHERE clause is what
+  // enforces pending-only confirmation: as a read-then-write, an unsubscribe
+  // landing between the two would be silently undone by the write.
+  const updated = await env.DB.prepare(
+    "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?2 " +
+      "WHERE confirm_token = ?1 AND status = 'pending'"
   )
     .bind(token, new Date().toISOString())
     .run();
 
+  if (updated.meta && updated.meta.changes > 0) return json({ ok: true, status: "confirmed" });
+
+  // Nothing moved. Work out why — reading only, so this cannot resurrect a row.
+  const row = await env.DB.prepare("SELECT status FROM subscribers WHERE confirm_token = ?1")
+    .bind(token)
+    .first();
+
+  if (!row) return json({ ok: false, error: "unknown_token" }, { status: 404 });
+
+  // A second click on the same link reads as "already done" rather than an
+  // error: the token is not consumed on success.
+  if (row.status === "confirmed") return json({ ok: true, status: "already_confirmed" });
+
+  // Unsubscribing rotates confirm_token, so an unsubscribed row should never
+  // be reachable by a live confirm link. Belt and braces for the case where it
+  // is — this is the "old confirm cannot re-subscribe" rule.
+  return json({ ok: false, error: "unsubscribed" }, { status: 409 });
+}
+
+async function handleUnsubscribe(request, url, env) {
+  const queryToken = (url.searchParams.get("token") || "").trim();
+
+  if (request.method === "GET") {
+    return seeOther(env, "unsubscribe", queryToken);
+  }
+
+  const body = await readBody(request);
+  const bodyToken = typeof body.token === "string" ? body.token.trim() : "";
+
+  // Two POSTers, told apart by where the token is. Mail clients doing RFC 8058
+  // one-click put it in the query string (their body is
+  // `List-Unsubscribe=One-Click`); the status page sends JSON. Only the page
+  // gets a meaningful status back — mail clients retry on non-2xx, so an
+  // unknown token must still answer 200 there rather than trigger a retry loop.
+  //
+  // ⚠️ A token in the query is what makes a request one-click — never the
+  // mere absence of one in the body. Inferring it the other way hands that
+  // retry-proof `{ok:true}` to a status-page POST whose body was empty or
+  // unparseable, reporting success for an unsubscribe that never happened and
+  // hiding the client bug that caused it. With no token anywhere there is no
+  // mail client to protect, so that answers 400 like any other bad request.
+  const oneClick = Boolean(queryToken) && !bodyToken;
+  const token = bodyToken || queryToken;
+
+  if (!TOKEN_RE.test(token)) {
+    return oneClick ? json({ ok: true }) : json({ ok: false, error: "invalid_token" }, { status: 400 });
+  }
+
+  // Idempotent: an already-unsubscribed row matches and is rewritten to the
+  // same state, so a second click is a success rather than a dead link.
+  //
+  // ⚠️ confirm_token is rotated here; unsubscribe_token deliberately is NOT.
+  // Rotating the confirm token kills any outstanding confirmation mail, which
+  // is the capability to *add* this address back. The unsubscribe token is the
+  // capability to *remove*, it is already sitting in every message ever sent,
+  // and rotating it would break both idempotency and the List-Unsubscribe
+  // header in mail that has already gone out.
+  const result = await env.DB.prepare(
+    "UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ?2, confirm_token = ?3 " +
+      "WHERE unsubscribe_token = ?1"
+  )
+    .bind(token, new Date().toISOString(), newToken())
+    .run();
+
   const matched = result.meta && result.meta.changes > 0;
 
-  // Mail clients retry one-click unsubscribe on non-2xx, so an unknown token
-  // still answers 200 there.
   if (oneClick) return json({ ok: true });
 
   return matched
-    ? htmlPage(env, "Unsubscribed", "You will not receive any further status emails. You can resubscribe at any time.")
-    : htmlPage(env, "Link not recognised", "This unsubscribe link is not valid — you may already be unsubscribed.", 404);
+    ? json({ ok: true, status: "unsubscribed" })
+    : json({ ok: false, error: "unknown_token" }, { status: 404 });
 }
 
 /* ------------------------------------------------------------------ */
@@ -300,14 +380,19 @@ async function handleNotify(request, env, mailer) {
   // One message per recipient — never a shared To/Cc, which would leak the
   // entire subscriber list to everyone on it.
   const messages = recipients.map((row) => {
-    const unsubUrl = `${apiBase(env)}/api/unsubscribe?token=${row.unsubscribe_token}`;
+    // Two different URLs on purpose. The one a person clicks goes to the
+    // status page, which asks before doing anything. The one in the header is
+    // POSTed by Gmail/Yahoo themselves with no human present, so it has to
+    // stay a machine endpoint on the API — RFC 8058 requires that POST to act.
+    const unsubUrl = actionUrl(env, "unsubscribe", row.unsubscribe_token);
+    const oneClickUrl = `${apiBase(env)}/api/unsubscribe?token=${row.unsubscribe_token}`;
     return {
       to: row.email,
       subject,
       html: incidentHtml(env, { action, title, issueUrl, unsubUrl }),
       text: incidentText(env, { action, title, issueUrl, unsubUrl }),
       headers: {
-        "List-Unsubscribe": `<${unsubUrl}>`,
+        "List-Unsubscribe": `<${oneClickUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
       // Spends against the total daily budget only, never the subscribe
@@ -346,14 +431,14 @@ function confirmHtml(env, confirmUrl) {
   return MAIL_WRAP(
     `<h2 style="margin:0 0 16px;font-size:19px">Confirm your subscription</h2>` +
       `<p style="margin:0 0 20px">Someone — hopefully you — asked to receive ${escapeHtml(brand(env))} ` +
-      `updates at this address. Confirm to start receiving them:</p>` +
+      `updates at this address. Open the confirmation page, then confirm there:</p>` +
       `<p style="margin:0 0 24px"><a href="${confirmUrl}" ` +
       `style="background:#0b7285;color:#fff;text-decoration:none;padding:11px 20px;border-radius:6px;display:inline-block">` +
-      `Confirm subscription</a></p>` +
+      `Continue to confirmation</a></p>` +
       `<p style="margin:0 0 8px;color:#666;font-size:13px">Or paste this link into your browser:<br>` +
       `<span style="word-break:break-all">${confirmUrl}</span></p>` +
       `<p style="margin:20px 0 0;color:#666;font-size:13px">If you did not request this, ignore this email — ` +
-      `no subscription is created until the link above is clicked.</p>`
+      `no subscription is created unless you open the page and press Confirm subscription.</p>`
   );
 }
 
@@ -361,9 +446,9 @@ function confirmText(env, confirmUrl) {
   return (
     `Confirm your ${brand(env)} subscription\n\n` +
     `Someone - hopefully you - asked to receive status updates at this address.\n` +
-    `Open this link to confirm:\n\n${confirmUrl}\n\n` +
+    `Open this link, then confirm on the page:\n\n${confirmUrl}\n\n` +
     `If you did not request this, ignore this email. No subscription is created\n` +
-    `until the link is clicked.\n`
+    `unless you open the page and press Confirm subscription.\n`
   );
 }
 
@@ -422,6 +507,46 @@ function apiBase(env) {
 }
 function statusSite(env) {
   return (env.STATUS_URL || "https://status.emoexai.com").replace(/\/$/, "");
+}
+
+/**
+ * The user-visible URL for an action, on the status site.
+ *
+ * The token goes in the fragment, not the query string, and that is the whole
+ * point: a fragment is never transmitted to a server, so it stays out of
+ * GitHub Pages' logs, out of any CDN in front of them, and out of the Referer
+ * of every asset the page loads. The page scrubs it from the address bar as
+ * soon as it has read it, so it does not reach history or a bookmark either.
+ */
+function actionUrl(env, action, token) {
+  return `${statusSite(env)}/#subscription=${action}&token=${token}`;
+}
+
+/**
+ * Send a link click to the status page without touching the database.
+ *
+ * 303 rather than 302 so the redirect is unambiguously a GET. A malformed or
+ * missing token still redirects — the page renders "link not recognised"
+ * without a network call, which keeps this endpoint from being a token oracle.
+ */
+function seeOther(env, action, token) {
+  const clean = (token || "").trim();
+  const target = TOKEN_RE.test(clean)
+    ? actionUrl(env, action, clean)
+    : `${statusSite(env)}/#subscription=invalid`;
+
+  return new Response(null, {
+    status: 303,
+    headers: {
+      Location: target,
+      // The token is in this Location header. Keep it out of shared caches,
+      // out of the Referer of whatever the status page loads next, and out of
+      // search indexes.
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
 }
 
 function normalizeEmail(value) {
@@ -501,40 +626,6 @@ function json(body, init = {}) {
     status: init.status || 200,
     headers: { "content-type": "application/json; charset=utf-8", ...(init.headers || {}) },
   });
-}
-
-function htmlPage(env, heading, message, status = 200) {
-  const site = statusSite(env);
-  const body = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(heading)} · ${escapeHtml(brand(env))}</title>
-<style>
-  :root { color-scheme: light dark; --bg:#fff; --fg:#1a1a1a; --muted:#666; --accent:#0b7285; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#16191c; --fg:#e8eaed; --muted:#9aa0a6; --accent:#4dabf7; }
-  }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-         background:var(--bg); color:var(--fg);
-         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
-  main { max-width:34rem; padding:2.5rem 1.5rem; text-align:center; }
-  h1 { font-size:1.4rem; margin:0 0 .75rem; }
-  p { color:var(--muted); line-height:1.6; margin:0 0 1.75rem; }
-  a.button { display:inline-block; background:var(--accent); color:#fff; text-decoration:none;
-             padding:.7rem 1.3rem; border-radius:.4rem; font-size:.95rem; }
-</style>
-</head>
-<body>
-  <main>
-    <h1>${escapeHtml(heading)}</h1>
-    <p>${escapeHtml(message)}</p>
-    <a class="button" href="${site}">Back to ${escapeHtml(brand(env))}</a>
-  </main>
-</body>
-</html>`;
-  return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
 function escapeHtml(value) {
