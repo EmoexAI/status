@@ -1,4 +1,4 @@
-<!DOCTYPE html> <html lang=en> <head> <meta charset=utf-8> <meta content="width=device-width,initial-scale=1" name=viewport> <meta content=#333333 name=theme-color> <base href=/ > <link href=manifest.json rel=manifest crossorigin=use-credentials> <script>__SAPPER__={baseUrl:"",preloaded:[void 0]};if('serviceWorker' in navigator)navigator.serviceWorker.register('/service-worker.js');(function(){try{eval("async function x(){}");var main="/client/client.95a2bf09.js"}catch(e){main="/client/legacy/client.9d42022e.js"};var s=document.createElement("script");try{new Function("if(0)import('')")();s.src=main;s.type="module";s.crossOrigin="use-credentials";}catch(e){s.src="/client/shimport@2.0.5.js";s.setAttribute("data-main",main);}document.head.appendChild(s);}());</script> <link href=client/client-31a52aa5.css rel=stylesheet><link href=client/createOctokit-a85f76c7.css rel=stylesheet><link href=client/index-b0b6455a.css rel=stylesheet> <script>// If `prefers-color-scheme` is not supported, fall back to light mode.
+<!DOCTYPE html> <html lang=en> <head> <meta charset=utf-8> <meta content="width=device-width,initial-scale=1" name=viewport> <meta content=#333333 name=theme-color> <base href=/ > <link href=manifest.json rel=manifest crossorigin=use-credentials> <script>__SAPPER__={baseUrl:"",preloaded:[void 0]};if('serviceWorker' in navigator)navigator.serviceWorker.register('/service-worker.js');(function(){try{eval("async function x(){}");var main="/client/client.e5e6c34d.js"}catch(e){main="/client/legacy/client.e88b0ee7.js"};var s=document.createElement("script");try{new Function("if(0)import('')")();s.src=main;s.type="module";s.crossOrigin="use-credentials";}catch(e){s.src="/client/shimport@2.0.5.js";s.setAttribute("data-main",main);}document.head.appendChild(s);}());</script> <link href=client/client-31a52aa5.css rel=stylesheet><link href=client/createOctokit-a85f76c7.css rel=stylesheet><link href=client/index-b0b6455a.css rel=stylesheet> <script>// If `prefers-color-scheme` is not supported, fall back to light mode.
       // In this case, light.css will be downloaded with `highest` priority.
       if (typeof window !== "undefined" && typeof document !== "undefined" && "matchMedia" in window && window.matchMedia('(prefers-color-scheme: dark)').media === 'not all') {
         document.documentElement.style.display = 'none';
@@ -421,21 +421,44 @@
    * make hydration remove our node; by then the credential is already
    * scrubbed from the URL and cannot be recovered from a reload.
    */
+  var actionMountObserver = null;
+
   function mountActionCard(pending) {
-    whenContainer(function (container) {
-      var card = buildActionCard(pending);
-      var existing = document.getElementById(ACTION_CARD_ID);
-      if (existing && existing.parentNode) {
-        existing.parentNode.replaceChild(card, existing);
-      } else {
-        container.insertBefore(card, container.firstChild);
-      }
-      try {
-        card.focus();
-      } catch (error) {
-        /* focus is a courtesy, never a reason to break the page */
-      }
+    // A new same-tab mail link supersedes the previous action and its
+    // observer. Keep one watcher tied to the current in-memory token.
+    if (actionMountObserver) actionMountObserver.disconnect();
+
+    function install() {
+      whenContainer(function (container) {
+        var card = buildActionCard(pending);
+        var existing = document.getElementById(ACTION_CARD_ID);
+        if (existing && existing.parentNode) {
+          existing.parentNode.replaceChild(card, existing);
+        } else {
+          container.insertBefore(card, container.firstChild);
+        }
+        try {
+          card.focus();
+        } catch (error) {
+          /* focus is a courtesy, never a reason to break the page */
+        }
+      });
+    }
+
+    // The real Upptime app can replace main.container *after* window.load
+    // while Svelte finishes hydration. The credential has already been
+    // scrubbed, so losing this node once would otherwise be unrecoverable.
+    // Observe the document and restore the current action whenever a SPA
+    // render removes it. A later hashchange disconnects this observer.
+    actionMountObserver = new MutationObserver(function () {
+      if (!document.getElementById(ACTION_CARD_ID)) install();
     });
+    actionMountObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    install();
   }
 
   var pageReady = document.readyState === "complete";
@@ -541,7 +564,7 @@
   } catch (error) {
     /* Old browser, missing fetch, anything at all: never break the page. */
   }
-})(); </script> <link href=/client/client.95a2bf09.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/client-31a52aa5.css rel=preload as=style><link href=/client/index.131f66b2.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit.f3ef66a5.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/inject_styles.803b7e80.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit-a85f76c7.css rel=preload as=style><link href=/client/index-b0b6455a.css rel=preload as=style></head> <body> <div id=sapper> <nav class=svelte-a08hsz><div class="svelte-a08hsz container"> <ul class=svelte-a08hsz><li><a href=/ class=svelte-a08hsz target=_self>Status</a> </li> </ul></div> </nav> <main class=container></main> <footer class=svelte-jbr799><p>This page is <a href=https://github.com/EmoexAI/status>open source</a>, powered by <a href=https://upptime.js.org>Upptime</a></p> </footer></div> <script> try {
+})(); </script> <link href=/client/client.e5e6c34d.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/client-31a52aa5.css rel=preload as=style><link href=/client/index.a28ffb4c.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit.7c4353ba.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/inject_styles.803b7e80.js rel=modulepreload as=script crossorigin=use-credentials><link href=/client/createOctokit-a85f76c7.css rel=preload as=style><link href=/client/index-b0b6455a.css rel=preload as=style></head> <body> <div id=sapper> <nav class=svelte-a08hsz><div class="svelte-a08hsz container"> <ul class=svelte-a08hsz><li><a href=/ class=svelte-a08hsz target=_self>Status</a> </li> </ul></div> </nav> <main class=container></main> <footer class=svelte-jbr799><p>This page is <a href=https://github.com/EmoexAI/status>open source</a>, powered by <a href=https://upptime.js.org>Upptime</a></p> </footer></div> <script> try {
         if (typeof window !== "undefined" && window.navigator && navigator.serviceWorker) {
           navigator.serviceWorker.getRegistrations().then(function (registrations) {
             for (let registration of registrations) {
