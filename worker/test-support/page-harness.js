@@ -81,6 +81,7 @@ function fakeDom(options = {}) {
     appendChild(child) {
       child.parentNode = this;
       this.children.push(child);
+      if (options.onMutation) options.onMutation();
       return child;
     },
     insertBefore(child, reference) {
@@ -88,6 +89,7 @@ function fakeDom(options = {}) {
       child.parentNode = this;
       if (at < 0) this.children.push(child);
       else this.children.splice(at, 0, child);
+      if (options.onMutation) options.onMutation();
       return child;
     },
     replaceChild(child, replaced) {
@@ -96,6 +98,7 @@ function fakeDom(options = {}) {
       child.parentNode = this;
       replaced.parentNode = null;
       this.children.splice(at, 1, child);
+      if (options.onMutation) options.onMutation();
       return replaced;
     },
     get firstChild() {
@@ -124,10 +127,12 @@ function fakeDom(options = {}) {
     focused,
     setContainerPresent(present) {
       containerPresent = present;
+      if (options.onMutation) options.onMutation();
     },
     replaceContainer() {
       container = make("main");
       containerPresent = true;
+      if (options.onMutation) options.onMutation();
     },
     document: {
       readyState: options.readyState || "complete",
@@ -167,7 +172,21 @@ export const healthOk = () => jsonResponse(200, { ok: true, subscribe_enabled: t
  */
 export function loadPage(fetchImpl, options = {}) {
   const clock = fakeClock();
-  const dom = fakeDom(options);
+  const mutationObservers = [];
+  let mutationScheduled = false;
+  const notifyMutation = () => {
+    // Real MutationObserver callbacks run after the current DOM operation,
+    // never recursively in the middle of appendChild/buildActionCard.
+    if (mutationScheduled) return;
+    mutationScheduled = true;
+    queueMicrotask(() => {
+      mutationScheduled = false;
+      for (const observer of mutationObservers) {
+        if (observer.active) observer.callback();
+      }
+    });
+  };
+  const dom = fakeDom({ ...options, onMutation: notifyMutation });
 
   const replaceStateCalls = [];
   const location = { hash: options.hash || "", pathname: "/", search: "" };
@@ -208,8 +227,17 @@ export function loadPage(fetchImpl, options = {}) {
     clearTimeout: clock.clearTimeout,
     AbortController,
     MutationObserver: class {
-      observe() {}
-      disconnect() {}
+      constructor(callback) {
+        this.callback = callback;
+        this.active = false;
+        mutationObservers.push(this);
+      }
+      observe() {
+        this.active = true;
+      }
+      disconnect() {
+        this.active = false;
+      }
     },
   });
 
@@ -264,6 +292,9 @@ export function loadPage(fetchImpl, options = {}) {
       else dom.setContainerPresent(true);
       dom.document.readyState = "complete";
       dispatch("load");
+    },
+    replaceMain() {
+      dom.replaceContainer();
     },
     navigateHash(hash) {
       location.hash = hash;

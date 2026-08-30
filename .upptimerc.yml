@@ -514,21 +514,44 @@ status-website:
        * make hydration remove our node; by then the credential is already
        * scrubbed from the URL and cannot be recovered from a reload.
        */
+      var actionMountObserver = null;
+
       function mountActionCard(pending) {
-        whenContainer(function (container) {
-          var card = buildActionCard(pending);
-          var existing = document.getElementById(ACTION_CARD_ID);
-          if (existing && existing.parentNode) {
-            existing.parentNode.replaceChild(card, existing);
-          } else {
-            container.insertBefore(card, container.firstChild);
-          }
-          try {
-            card.focus();
-          } catch (error) {
-            /* focus is a courtesy, never a reason to break the page */
-          }
+        // A new same-tab mail link supersedes the previous action and its
+        // observer. Keep one watcher tied to the current in-memory token.
+        if (actionMountObserver) actionMountObserver.disconnect();
+
+        function install() {
+          whenContainer(function (container) {
+            var card = buildActionCard(pending);
+            var existing = document.getElementById(ACTION_CARD_ID);
+            if (existing && existing.parentNode) {
+              existing.parentNode.replaceChild(card, existing);
+            } else {
+              container.insertBefore(card, container.firstChild);
+            }
+            try {
+              card.focus();
+            } catch (error) {
+              /* focus is a courtesy, never a reason to break the page */
+            }
+          });
+        }
+
+        // The real Upptime app can replace main.container *after* window.load
+        // while Svelte finishes hydration. The credential has already been
+        // scrubbed, so losing this node once would otherwise be unrecoverable.
+        // Observe the document and restore the current action whenever a SPA
+        // render removes it. A later hashchange disconnects this observer.
+        actionMountObserver = new MutationObserver(function () {
+          if (!document.getElementById(ACTION_CARD_ID)) install();
         });
+        actionMountObserver.observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+
+        install();
       }
 
       var pageReady = document.readyState === "complete";
