@@ -96,6 +96,21 @@ test("the action waits for hydration but survives replacement of the generated m
   );
 });
 
+test("the action is restored when Upptime replaces main after window.load", async () => {
+  const { page, calls } = landing(CONFIRM_HASH);
+  await settle();
+  const firstCard = page.action.element;
+
+  // This is what the production Svelte page did: the action mounted at load,
+  // then a later hydration render replaced main.container and removed it.
+  page.replaceMain();
+  await settle();
+
+  assert.ok(page.action.present, "the scrubbed credential must still have a usable page");
+  assert.notEqual(page.action.element, firstCard, "the observer should rebuild into the new main");
+  assert.deepEqual(actionCalls(calls), [], "restoring UI must never perform the action");
+});
+
 test("a later mail link in the same tab is consumed and replaces the action card", async () => {
   const { page, calls } = landing("");
   await settle();
