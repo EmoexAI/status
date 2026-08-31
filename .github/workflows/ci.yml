@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   worker:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, claw-linux]
     defaults:
       run:
         working-directory: worker
@@ -59,7 +59,7 @@ jobs:
   # Nothing compiles them, so a typo here is only found when a monitor
   # silently stops running.
   config:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, claw-linux]
     steps:
       - uses: actions/checkout@v4
 
@@ -103,7 +103,7 @@ jobs:
   ci-ok:
     if: always()
     needs: [worker, config]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, claw-linux]
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
