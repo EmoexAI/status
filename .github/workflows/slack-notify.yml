@@ -1,0 +1,112 @@
+name: Slack Notify
+
+# Fans incidents out to Slack through the Claw bot.
+#
+# Hooked on the same signal as maillist-notify.yml: both monitors mark an
+# incident by opening a GitHub Issue labeled `status` and end it by closing
+# that issue, so the issue lifecycle covers HTTP probes and log-based Cloud Run
+# checks alike with no per-monitor wiring.
+#
+# ⚠️ Issues created with the built-in GITHUB_TOKEN do NOT trigger workflows.
+# Both monitors therefore have to open issues with GH_PAT, or this never runs.
+#
+# ⚠️ Deliberately a separate workflow from maillist-notify.yml rather than a
+# second step in it. Claw runs on the GCP infrastructure this page monitors, so
+# it is the one fan-out target that can plausibly be unreachable during exactly
+# the incident it is being asked to report. A failure here must not take the
+# email fan-out down with it.
+on:
+  issues:
+    types: [opened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slack-notify-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: contains(github.event.issue.labels.*.name, 'status')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Claw
+        env:
+          # Repository variable, e.g. https://claw.emoexai.com/hooks/status-alert
+          ENDPOINT: ${{ vars.CLAW_STATUS_WEBHOOK }}
+          # Repository secret. Must equal the route's `secret` in the gateway's
+          # config.yaml under platforms.webhook.extra.routes.status-alert.
+          SECRET: ${{ secrets.CLAW_WEBHOOK_SECRET }}
+          # Read through env, never inlined into the script: issue titles are
+          # attacker-influenceable text and `${{ }}` interpolation into `run`
+          # is a shell-injection hole.
+          ISSUE_ACTION: ${{ github.event.action }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ENDPOINT:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "::warning::CLAW_STATUS_WEBHOOK or CLAW_WEBHOOK_SECRET is unset — skipping Slack notification."
+            exit 0
+          fi
+
+          # The headline is built here, not in the route template, for two
+          # reasons. The gateway renders `{field}` substitutions only — it has
+          # no conditional, so open and close cannot share one template. And
+          # the gateway's config.yaml is hand-maintained on a VM and not in any
+          # repo, so wording kept here is the only wording under review.
+          #
+          # The issue title is not restated as the subject: it still reads
+          # "🛑 API is down" on the close event, so the template labels it as
+          # the incident being reported rather than the current state.
+          # `state`, not `status`: the workflow runs under bash, but `status` is
+          # a read-only variable in zsh and anyone pasting this block into a
+          # local shell to test it would hit an error that has nothing to do
+          # with the notification.
+          if [ "$ISSUE_ACTION" = "closed" ]; then
+            state=recovered
+            headline='✅ EmoEx 服务已恢复'
+          else
+            state=down
+            headline='🚨 EmoEx 服务异常'
+          fi
+
+          payload="$(jq -nc \
+            --arg status "$state" \
+            --arg headline "$headline" \
+            --arg title "$ISSUE_TITLE" \
+            --argjson number "$ISSUE_NUMBER" \
+            --arg url "$ISSUE_URL" \
+            '{status: $status, headline: $headline, title: $title, number: $number, url: $url}')"
+
+          # HMAC v2: sign "<unix timestamp>.<raw body>" and send the timestamp
+          # alongside it, so a captured request cannot be replayed outside the
+          # gateway's 300s window. Must NOT also send X-Hub-Signature-256 — the
+          # gateway matches that header first and would never reach V2 — and
+          # must NOT send the body-only X-Webhook-Signature, which Caddy
+          # answers 401 as a retired scheme.
+          ts="$(date +%s)"
+          sig="$(printf '%s.%s' "$ts" "$payload" \
+            | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
+
+          code="$(curl -sS --retry 3 --retry-delay 5 --retry-connrefused \
+            -o /tmp/claw-response.json -w '%{http_code}' \
+            -X POST "$ENDPOINT" \
+            -H "X-Webhook-Timestamp: $ts" \
+            -H "X-Webhook-Signature-V2: $sig" \
+            -H 'content-type: application/json' \
+            -d "$payload")"
+
+          echo "HTTP $code"
+          cat /tmp/claw-response.json
+          echo
+
+          # 200 is a deliver_only route answering synchronously; 202 is the
+          # agent path accepting the job. Either means Claw took it.
+          case "$code" in
+            200|202) ;;
+            *) echo "::error::Claw notify failed with HTTP $code"; exit 1 ;;
+          esac
