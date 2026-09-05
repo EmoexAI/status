@@ -61,6 +61,52 @@ probes and log-based Cloud Run checks alike — with no per-monitor wiring.
 Both monitors therefore open issues with `GH_PAT`. If you ever switch one back
 to `GITHUB_TOKEN`, incident emails stop silently.
 
+## Slack alerts (Claw)
+
+The same incidents also reach Slack, posted by the **Claw** bot
+(`@claw`, the Hermes agent gateway on `openclaw-gateway`):
+
+```
+Upptime / cloud-run-monitor  →  GitHub Issue labeled `status`  (opened / closed)
+                             →  .github/workflows/slack-notify.yml
+                             →  POST https://claw.emoexai.com/hooks/status-alert
+                             →  Caddy rewrite /hooks/* → /webhooks/*  →  Hermes  →  Slack
+```
+
+It hangs off the same `status`-labeled issue lifecycle as the email fan-out,
+so both monitors are covered with no per-monitor wiring — and the same
+`GH_PAT` caveat above applies to it.
+
+It is a separate workflow from `maillist-notify.yml` on purpose: Claw runs on
+the GCP infrastructure this page monitors, so it is the one fan-out target
+that can plausibly be unreachable during exactly the incident it is reporting.
+A failed Slack post must not take the incident emails down with it.
+
+Wiring on this side is two repo settings:
+
+| Setting | Kind | Value |
+| ------- | ---- | ----- |
+| `CLAW_STATUS_WEBHOOK` | variable | `https://claw.emoexai.com/hooks/status-alert` |
+| `CLAW_WEBHOOK_SECRET` | secret   | must equal the route's `secret` on the gateway |
+
+Both unset → the workflow logs a warning and exits 0, so this is safe to merge
+before the gateway route exists.
+
+Wiring on the Claw side is a route under `platforms.webhook.extra.routes` in
+`~/.hermes/config.yaml` on the VM. Three things there are easy to get wrong:
+
+- The route sets `deliver: slack` plus `deliver_extra: {chat_id: ...}`.
+  ⚠️ **`deliver_chat_id` is not read by the gateway.** The three existing
+  routes all set it, and their messages land in the right channel only because
+  the value happens to equal `SLACK_HOME_CHANNEL`, which is the fallback.
+- Requests must be signed **HMAC v2** — `X-Webhook-Timestamp` plus
+  `X-Webhook-Signature-V2 = HMAC-SHA256("<ts>.<body>")`, valid for 300s.
+  Sending `X-Webhook-Signature` (body-only, retired) gets a 401 from Caddy, and
+  sending `X-Hub-Signature-256` matches ahead of V2 and never reaches it.
+- `config.yaml` has **no hot reload**. Adding a route needs
+  `sudo systemctl restart hermes-gateway.service`. Caddy needs no change — its
+  `/hooks/*` rewrite is a wildcard.
+
 ## First-time setup
 
 ### 1. Create the GitHub repo
@@ -158,6 +204,7 @@ in the chain is detected.
 │   ├── updates.yml                   # auto-update Upptime template
 │   ├── cloud-run-monitor.yml         # custom — GCP Logging probes
 │   ├── maillist-notify.yml           # custom — incident → subscribers
+│   ├── slack-notify.yml              # custom — incident → Slack via Claw
 │   └── maillist-deploy.yml           # custom — deploy worker/ to Cloudflare
 ├── config/
 │   └── cloud-run-targets.yml         # Cloud Run service → log rules
