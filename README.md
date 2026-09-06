@@ -84,9 +84,9 @@ A failed Slack post must not take the incident emails down with it.
 
 Wiring on this side is two repo settings:
 
-| Setting | Kind | Value |
-| ------- | ---- | ----- |
-| `CLAW_STATUS_WEBHOOK` | variable | `https://claw.emoexai.com/hooks/status-alert` |
+| Setting               | Kind     | Value                                          |
+| --------------------- | -------- | ---------------------------------------------- |
+| `CLAW_STATUS_WEBHOOK` | variable | `https://claw.emoexai.com/hooks/status-alert`  |
 | `CLAW_WEBHOOK_SECRET` | secret   | must equal the route's `secret` on the gateway |
 
 Both unset → the workflow logs a warning and exits 0, so this is safe to merge
