@@ -412,3 +412,14 @@ test("an action carries its own deadline, shorter than a subscribe's", async () 
   assert.ok(armed > 0, "an action request must be bounded at all");
   assert.ok(armed < 30_000, `an action waited ${armed}ms, the subscribe budget`);
 });
+
+test("a fast health response keeps the subscribe form after hydration replaces main", async () => {
+  const page = loadPage(() => healthOk());
+  await settle();
+  const first = page.subscribe.element;
+  assert.ok(page.subscribe.present);
+  page.replaceMain();
+  await settle();
+  assert.ok(page.subscribe.present);
+  assert.equal(page.subscribe.element, first, "retain the form and any typed input");
+});
