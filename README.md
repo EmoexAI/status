@@ -9,9 +9,9 @@ accurately shows it red.
 
 | Service                   | How                                                                 |
 | ------------------------- | ------------------------------------------------------------------- |
-| `api.emoexai.com`         | HTTP probe (Upptime, every 5 min)                                   |
-| `iepcp.emoexai.com`       | HTTP probe (Upptime, every 5 min)                                   |
-| `pages.emoexai.com`       | HTTP probe (Upptime, every 5 min)                                   |
+| `api.emoexai.com`         | HTTP probe (Upptime)                                   |
+| `iepcp.emoexai.com`       | HTTP probe (Upptime)                                   |
+| `pages.emoexai.com`       | HTTP probe (Upptime)                                   |
 | Cloud Run: `summary-task` | GCP Logging query (every 5 min, see `config/cloud-run-targets.yml`) |
 
 The three HTTP-probed domains sit behind Cloudflare → GKE, so each probe
